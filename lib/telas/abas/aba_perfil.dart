@@ -144,7 +144,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
                     secondary: const Icon(Icons.notifications_active, color: Colors.grey),
                     title: Text("Notificações Lembrete", style: TextStyle(color: corTexto)),
                     subtitle: Text("Lembrar de checar o painel semanalmente", style: TextStyle(color: Colors.grey.shade500)),
-                    activeColor: Colors.blue,
+                    activeThumbColor: Colors.blue,
                     value: _notificacoes,
                     onChanged: (bool valor) {
                       setState(() => _notificacoes = valor);
@@ -154,7 +154,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   SwitchListTile(
                     secondary: const Icon(Icons.dark_mode, color: Colors.grey),
                     title: Text("Modo Escuro (Dark Mode)", style: TextStyle(color: corTexto)),
-                    activeColor: Colors.blue,
+                    activeThumbColor: Colors.blue,
                     value: isEscuro, // Reflete o estado atual
                     onChanged: (bool valor) {
                       // Altera o tema global
