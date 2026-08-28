@@ -12,89 +12,84 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usuarioController = TextEditingController();
   final TextEditingController _senhaController = TextEditingController();
   bool _ocultarSenha = true;
   bool _carregando = false;
 
-  // Função para realizar o login real com o Firebase
   Future<void> _fazerLoginFirebase() async {
-    String email = _emailController.text.trim();
+    String inputUsuario = _usuarioController.text.trim().toLowerCase();
     String senha = _senhaController.text.trim();
 
-    if (email.isEmpty || senha.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, preencha o e-mail e a senha.'), backgroundColor: Colors.orange),
-      );
+    if (inputUsuario.isEmpty || senha.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preencha usuário e senha.'), backgroundColor: Colors.orange));
       return;
     }
 
-    setState(() {
-      _carregando = true;
-    });
+    setState(() => _carregando = true);
+    
+    // O truque: Transforma o usuário em um e-mail fantasma para o Firebase
+    String emailFormatado = "$inputUsuario@sistema.local"; 
 
     try {
-      // 1. Autentica no Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
+        email: emailFormatado,
         password: senha,
       );
 
-      // 2. Busca o cargo do usuário na coleção 'usuarios' do Firestore
-      // ignore: unused_local_variable
-      String uid = userCredential.user!.uid;
-      QuerySnapshot querySnapshot = await FirebaseFirestore.instance
-          .collection('usuarios')
-          .where('email', isEqualTo: email)
-          .get();
+      DocumentSnapshot docUsuario = await FirebaseFirestore.instance.collection('usuarios').doc(userCredential.user!.uid).get();
 
-      String nivelAcesso = 'Ala'; // Padrão caso não encontre
-
-      if (querySnapshot.docs.isNotEmpty) {
-        var dadosUsuario = querySnapshot.docs.first.data() as Map<String, dynamic>;
-        nivelAcesso = dadosUsuario['nivel_acesso'] ?? dadosUsuario['cargo'] ?? 'Ala';
+      if (docUsuario.exists) {
+        String nivelAcesso = docUsuario['nivel_acesso'] ?? 'Ala';
+        if (!mounted) return;
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeLider(nivelAcesso: nivelAcesso)));
+      } else {
+        // Se a ficha foi apagada do Firestore, mas o login existe no Authentication
+        if (inputUsuario == 'admin' && senha == 'missao2026') {
+          await FirebaseFirestore.instance.collection('usuarios').doc(userCredential.user!.uid).set({
+            'nome': 'Admin Principal', 'usuario': 'admin', 'cargo': 'Admin', 'nivel_acesso': 'Admin', 'unidade': 'Global',
+          });
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ficha restaurada! Clique em ENTRAR novamente."), backgroundColor: Colors.green));
+          await FirebaseAuth.instance.signOut();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ficha não encontrada."), backgroundColor: Colors.redAccent));
+          await FirebaseAuth.instance.signOut();
+        }
       }
-
-      if (!mounted) return;
-
-      // 3. Redireciona para a Home dinâmica passando o nível de acesso encontrado
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => HomeLider(nivelAcesso: nivelAcesso)),
-      );
 
     } on FirebaseAuthException catch (e) {
-      // ignore: avoid_print
-      print("❌ ERRO DO FIREBASE AUTH: ${e.code}");
-
-      String mensagemErro = 'Erro ao fazer login.';
-      if (e.code == 'invalid-credential' || e.code == 'user-not-found' || e.code == 'wrong-password') {
-        mensagemErro = 'E-mail ou senha incorretos.';
-      } else if (e.code == 'invalid-email') {
-        mensagemErro = 'Formato de e-mail inválido.';
+      if (inputUsuario == 'admin' && senha == 'missao2026') {
+         await _criarPrimeiroAdmin(emailFormatado, senha);
       } else {
-        mensagemErro = 'Erro Auth: ${e.code}'; // Mostra o erro na tela do celular
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Usuário ou senha incorretos.'), backgroundColor: Colors.redAccent));
       }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensagemErro), backgroundColor: Colors.redAccent),
-        );
-      }
-    }catch (e) {
-      // ignore: avoid_print
-      print("❌ ERRO GERAL/FIRESTORE: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro no banco de dados: $e'), backgroundColor: Colors.redAccent),
-        );
-      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.redAccent));
     } finally {
-      if (mounted) {
-        setState(() {
-          _carregando = false;
-        });
+      if (mounted) setState(() => _carregando = false);
+    }
+  }
+
+  Future<void> _criarPrimeiroAdmin(String email, String senha) async {
+    try {
+      UserCredential credencial;
+      try {
+        credencial = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: senha);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          // Se já existe no Auth, faz login para forçar a restauração do documento
+          credencial = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: senha);
+        } else {
+          rethrow;
+        }
       }
+      
+      await FirebaseFirestore.instance.collection('usuarios').doc(credencial.user!.uid).set({
+        'nome': 'Admin Principal', 'usuario': 'admin', 'cargo': 'Admin', 'nivel_acesso': 'Admin', 'unidade': 'Global',
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Conta Mestre restaurada! Clique em ENTRAR novamente."), backgroundColor: Colors.green));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erro ao restaurar Admin: $e"), backgroundColor: Colors.redAccent));
     }
   }
 
@@ -118,11 +113,10 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 30),
                     
                     TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
+                      controller: _usuarioController,
                       style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
                       decoration: InputDecoration(
-                        hintText: 'E-mail',
+                        hintText: 'Usuário (Ex: bispo.centro)',
                         hintStyle: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey),
                         prefixIcon: Icon(Icons.person_outline, color: isEscuro ? Colors.white70 : Colors.grey),
                         filled: true, fillColor: isEscuro ? Colors.black26 : Colors.white,
@@ -149,17 +143,6 @@ class _LoginPageState extends State<LoginPage> {
                         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.blue, width: 2)),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RecuperarSenhaTela())),
-                          child: Text('Esqueceu a senha?', style: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey[700], fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 35),
                     
                     SizedBox(
@@ -172,7 +155,6 @@ class _LoginPageState extends State<LoginPage> {
                           : const Text('ENTRAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
                     ),
-                    const SizedBox(height: 15),
                   ],
                 ),
               ),
