@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../main.dart'; // Importa a variável global do main.dart
+import 'package:url_launcher/url_launcher.dart';
+import '../../../main.dart'; 
+import '../chamados_enviados.dart';
+import '../../services/gerador_pdf.dart';
 
 class AbaPerfil extends StatefulWidget {
   const AbaPerfil({super.key});
@@ -9,11 +12,28 @@ class AbaPerfil extends StatefulWidget {
 }
 
 class _AbaPerfilState extends State<AbaPerfil> {
-  bool _notificacoes = true;
+  // Variáveis do Líder
+  final String _nomeLider = "Irmão Silva";
+  final String _cargoLider = "Bispo"; 
+  final String _unidadeLider = "Ala Centro - Estaca Norte";
+
+  Future<void> _abrirLink(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw Exception('Não foi possível abrir o link');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro ao abrir a página oficial.'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Verifica se o tema atual é escuro
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     Color corFundo = isEscuro ? const Color(0xFF1E1E1E) : Colors.white;
     Color corTexto = isEscuro ? Colors.white : Colors.black87;
@@ -37,17 +57,11 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   CircleAvatar(
                     radius: 50,
                     backgroundColor: Colors.blue.withValues(alpha: 0.2),
-                    child: const Icon(Icons.person, size: 60, color: Colors.blue),
+                    child: Text(_nomeLider[0], style: const TextStyle(fontSize: 40, color: Colors.blue, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(height: 15),
-                  Text(
-                    "Irmão Silva",
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: corTexto),
-                  ),
-                  const Text(
-                    "Líder da Missão da Ala",
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
+                  Text(_nomeLider, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: corTexto)),
+                  Text(_cargoLider, style: const TextStyle(fontSize: 16, color: Colors.grey)),
                   const SizedBox(height: 5),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -56,10 +70,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                     ),
-                    child: const Text(
-                      "Ala Centro - Estaca Norte",
-                      style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
+                    child: Text(_unidadeLider, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ],
               ),
@@ -78,21 +89,33 @@ class _AbaPerfilState extends State<AbaPerfil> {
               child: Column(
                 children: [
                   ListTile(
-                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.picture_as_pdf, color: Colors.green)),
-                    title: Text("Exportar Relatório (PDF)", style: TextStyle(color: corTexto)),
-                    subtitle: Text("Gera um resumo da ala para a Estaca", style: TextStyle(color: Colors.grey.shade500)),
+                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.send, color: Colors.blue)),
+                    title: Text("Chamados Enviados", style: TextStyle(color: corTexto)),
+                    subtitle: Text("Jovens que já finalizaram o processo", style: TextStyle(color: Colors.grey.shade500)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                     onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerador de PDF será implementado em breve!')));
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ChamadosEnviadosTela()),
+                      );
                     },
                   ),
                   Divider(height: 1, color: isEscuro ? Colors.white12 : Colors.grey.shade200),
                   ListTile(
-                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.table_chart, color: Colors.orange)),
-                    title: Text("Exportar para Excel", style: TextStyle(color: corTexto)),
+                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.picture_as_pdf, color: Colors.green)),
+                    title: Text("Exportar Relatório (PDF)", style: TextStyle(color: corTexto)),
+                    subtitle: Text("Gera um resumo da ala para a Estaca", style: TextStyle(color: Colors.grey.shade500)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exportação para Excel será implementada em breve!')));
+                    onTap: () async {
+                      List<Map<String, dynamic>> jovensParaRelatorio = [
+                        {'nome': 'João Silva', 'idade': 19, 'status': 'Aguardando Exames', 'telefone': '(91) 90000-0000'},
+                        {'nome': 'Lucas Souza', 'idade': 17, 'status': 'Perspectiva', 'telefone': '(91) 91111-1111'},
+                        {'nome': 'Ana Beatriz', 'idade': 18, 'status': 'Enviado', 'data_envio': '15/07/2026', 'destino': 'Missão Brasil São Paulo Sul'},
+                        {'nome': 'Marcos Paulo', 'idade': 20, 'status': 'Enviado', 'data_envio': '12/08/2026', 'destino': 'Aguardando Carta'},
+                      ];
+
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando PDF...')));
+                      await GeradorPdf.gerarRelatorio(_unidadeLider.split(" - ")[0], jovensParaRelatorio);
                     },
                   ),
                 ],
@@ -113,16 +136,9 @@ class _AbaPerfilState extends State<AbaPerfil> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.public, color: Colors.blue),
-                    title: Text("Sistema do Portal Missionário", style: TextStyle(color: corTexto)),
+                    title: Text("Recursos de Líderes e Secretários", style: TextStyle(color: corTexto)),
                     trailing: const Icon(Icons.open_in_new, size: 16, color: Colors.grey),
-                    onTap: () {},
-                  ),
-                  Divider(height: 1, color: isEscuro ? Colors.white12 : Colors.grey.shade200),
-                  ListTile(
-                    leading: const Icon(Icons.menu_book, color: Colors.blue),
-                    title: Text("Manual: Pregar Meu Evangelho", style: TextStyle(color: corTexto)),
-                    trailing: const Icon(Icons.open_in_new, size: 16, color: Colors.grey),
-                    onTap: () {},
+                    onTap: () => _abrirLink('https://lcr.churchofjesuschrist.org/'),
                   ),
                 ],
               ),
@@ -141,23 +157,11 @@ class _AbaPerfilState extends State<AbaPerfil> {
               child: Column(
                 children: [
                   SwitchListTile(
-                    secondary: const Icon(Icons.notifications_active, color: Colors.grey),
-                    title: Text("Notificações Lembrete", style: TextStyle(color: corTexto)),
-                    subtitle: Text("Lembrar de checar o painel semanalmente", style: TextStyle(color: Colors.grey.shade500)),
-                    activeThumbColor: Colors.blue,
-                    value: _notificacoes,
-                    onChanged: (bool valor) {
-                      setState(() => _notificacoes = valor);
-                    },
-                  ),
-                  Divider(height: 1, color: isEscuro ? Colors.white12 : Colors.grey.shade200),
-                  SwitchListTile(
                     secondary: const Icon(Icons.dark_mode, color: Colors.grey),
                     title: Text("Modo Escuro (Dark Mode)", style: TextStyle(color: corTexto)),
-                    activeThumbColor: Colors.blue,
-                    value: isEscuro, // Reflete o estado atual
+                    activeColor: Colors.blue,
+                    value: isEscuro, 
                     onChanged: (bool valor) {
-                      // Altera o tema global
                       temaGlobalNotifier.value = valor ? ThemeMode.dark : ThemeMode.light;
                     },
                   ),
