@@ -303,6 +303,7 @@ class _AbaPainelState extends State<AbaPainel> {
     String nomeEtapaPendente = indexPendente != -1 ? listaEtapas[indexPendente] : "Enviou tudo";
     String mensagem = "Olá, $nome! Tudo bem? Vi aqui que a sua próxima etapa é: *$nomeEtapaPendente*. Precisa de alguma ajuda com isso?";
     final Uri url = Uri.parse('https://wa.me/$numeroLimpo?text=${Uri.encodeComponent(mensagem)}');
+    // ignore: empty_catches
     try { if (!await launchUrl(url, mode: LaunchMode.externalApplication)) throw Exception(); } catch (e) { }
   }
 

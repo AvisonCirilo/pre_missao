@@ -1,31 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class AbaDashboardEstaca extends StatefulWidget {
-  const AbaDashboardEstaca({super.key});
+class AbaDashboardGestor extends StatefulWidget {
+  const AbaDashboardGestor({super.key});
 
   @override
-  State<AbaDashboardEstaca> createState() => _AbaDashboardEstacaState();
+  State<AbaDashboardGestor> createState() => _AbaDashboardGestorState();
 }
 
-class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
-  final String _minhaEstaca = "Estaca Norte";
-
-  // ==========================================
-  // NOVO: DICIONÁRIO DE ESTACAS E ALAS
-  // ==========================================
+class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
   final Map<String, List<String>> _unidadesPorEstaca = {
     'Estaca Norte': ['Ala Centro', 'Ala Sul', 'Ala Norte'],
     'Distrito Sul': ['Ramo Leste', 'Ramo Oeste'],
     'Estaca Leste': ['Ala Primavera', 'Ala Esperança'],
   };
 
-  // Banco de Dados simulado atualizado com o campo 'estaca'
+  // Banco de Dados global simulado
   final List<Map<String, dynamic>> _todosJovens = [
     {'id': '1', 'nome': 'João Silva', 'idade': 19, 'sexo': 'Masculino', 'estaca': 'Estaca Norte', 'unidade': 'Ala Centro', 'status': 'Preparação', 'telefone': '5591900000000', 'etapas': <bool>[true, true, true, false, false, false, false, false], 'ultima_atualizacao': DateTime.now().subtract(const Duration(days: 40)), 'anotacoes': []},
     {'id': '2', 'nome': 'Ana Beatriz', 'idade': 18, 'sexo': 'Feminino', 'estaca': 'Estaca Norte', 'unidade': 'Ala Sul', 'status': 'Preparação', 'telefone': '5591900000000', 'etapas': <bool>[true, true, false, false, false, false, false], 'ultima_atualizacao': DateTime.now().subtract(const Duration(days: 5)), 'anotacoes': []},
-    {'id': '3', 'nome': 'Lucas Souza', 'idade': 17, 'sexo': 'Masculino', 'estaca': 'Estaca Norte', 'unidade': 'Ala Centro', 'status': 'Perspectiva', 'telefone': '', 'etapas': <bool>[false, false, false, false, false, false, false, false], 'ultima_atualizacao': DateTime.now(), 'anotacoes': []},
-    {'id': '5', 'nome': 'Julia Costa', 'idade': 19, 'sexo': 'Feminino', 'estaca': 'Estaca Norte', 'unidade': 'Ala Sul', 'status': 'Enviado', 'telefone': '5591900000000', 'etapas': <bool>[true, true, true, true, true, true, true], 'ultima_atualizacao': DateTime.now(), 'anotacoes': []},
+    {'id': '4', 'nome': 'Marcos Paulo', 'idade': 20, 'sexo': 'Masculino', 'estaca': 'Distrito Sul', 'unidade': 'Ramo Leste', 'status': 'Enviado', 'telefone': '5591900000000', 'etapas': <bool>[true, true, true, true, true, true, true, true], 'ultima_atualizacao': DateTime.now(), 'anotacoes': []},
   ];
 
   final List<String> _nomesEtapasRapazes = ["Aceitou o Desafio", "Ensino Médio", "Alistamento Militar", "Possui Mentor", "Metas com Bispo", "Exame Médico", "Exame Odonto", "Chamado Aberto"];
@@ -49,6 +43,9 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
     return concluidas / total;
   }
 
+  // ==========================================
+  // FUNÇÃO QUE ESTAVA FALTANDO ADICIONADA AQUI
+  // ==========================================
   Widget _construirAlertaEstagnacao(DateTime? ultimaAtualizacao) {
     if (ultimaAtualizacao == null) return const SizedBox.shrink();
     int dias = DateTime.now().difference(ultimaAtualizacao).inDays;
@@ -87,31 +84,6 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
     );
   }
 
-  List<Map<String, dynamic>> _calcularGargalos() {
-    Map<String, int> contagemEtapas = {};
-    int totalPreparacao = 0;
-    for (var jovem in _todosJovens) {
-      if (jovem['status'] == 'Preparação') {
-        totalPreparacao++;
-        List<bool> etapas = jovem['etapas'];
-        List<String> nomesEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
-        int indexPrimeiroFalso = etapas.indexOf(false);
-        if (indexPrimeiroFalso != -1) {
-          String etapaPendente = nomesEtapas[indexPrimeiroFalso];
-          contagemEtapas[etapaPendente] = (contagemEtapas[etapaPendente] ?? 0) + 1;
-        }
-      }
-    }
-    if (totalPreparacao == 0) return [];
-    var listaOrdenada = contagemEtapas.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    return listaOrdenada.take(3).map((e) => {
-      'etapa': e.key, 'quantidade': e.value, 'porcentagem': e.value / totalPreparacao
-    }).toList();
-  }
-
-  // ==========================================
-  // FORMULÁRIO COM DROPDOWN EM CASCATA
-  // ==========================================
   void _mostrarFormularioJovem({Map<String, dynamic>? jovemAtual}) {
     bool isEdicao = jovemAtual != null;
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
@@ -121,13 +93,9 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
     final telefoneCtrl = TextEditingController(text: isEdicao ? jovemAtual['telefone'] : ""); 
     String sexoSelecionado = isEdicao ? jovemAtual['sexo'] : "Masculino";
     
-    // Lógica Cascata: Pega a estaca do jovem ou a estaca padrão do líder
-    String estacaSelecionada = isEdicao ? (jovemAtual['estaca'] ?? _minhaEstaca) : _minhaEstaca;
-    
-    // Pega a lista de alas da estaca selecionada
+    String estacaSelecionada = isEdicao ? (jovemAtual['estaca'] ?? _unidadesPorEstaca.keys.first) : _unidadesPorEstaca.keys.first;
     List<String> listaAlas = _unidadesPorEstaca[estacaSelecionada] ?? [];
     
-    // Se a unidade salva não estiver na lista da estaca atual, reseta para a primeira da lista
     String unidadeSelecionada = isEdicao ? jovemAtual['unidade'] : (listaAlas.isNotEmpty ? listaAlas.first : "");
     if (!listaAlas.contains(unidadeSelecionada) && listaAlas.isNotEmpty) {
       unidadeSelecionada = listaAlas.first;
@@ -148,14 +116,13 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(isEdicao ? Icons.edit : Icons.person_add, color: Colors.purple),
+                    Icon(isEdicao ? Icons.edit : Icons.person_add, color: Colors.teal),
                     const SizedBox(width: 10),
-                    Text(isEdicao ? "Editar Jovem" : "Novo Jovem", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
+                    Text(isEdicao ? "Editar Jovem (Global)" : "Novo Jovem", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
                   ],
                 ),
                 const SizedBox(height: 25),
 
-                // 1. DROPDOWN DE ESTACA
                 DropdownButtonFormField<String>(
                   initialValue: estacaSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
                   style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
@@ -164,7 +131,6 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                   onChanged: (val) {
                     setStateModal(() {
                       estacaSelecionada = val!;
-                      // Atualiza a lista de alas e reseta a ala selecionada
                       listaAlas = _unidadesPorEstaca[estacaSelecionada]!;
                       unidadeSelecionada = listaAlas.first;
                     });
@@ -172,7 +138,6 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                 ),
                 const SizedBox(height: 15),
 
-                // 2. DROPDOWN DE ALA (Adapta-se ao item acima)
                 DropdownButtonFormField<String>(
                   initialValue: unidadeSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
                   style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
@@ -206,7 +171,7 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                 SizedBox(
                   width: double.infinity, height: 50,
                   child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                     onPressed: () {
                       if (nomeCtrl.text.trim().isEmpty) return;
                       setState(() {
@@ -273,7 +238,7 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(jovem['nome'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black), overflow: TextOverflow.ellipsis),
-                          Text("${jovem['unidade']} • ${jovem['idade']} anos", style: const TextStyle(color: Colors.grey)),
+                          Text("${jovem['estaca']} • ${jovem['unidade']} • ${jovem['idade']} anos", style: const TextStyle(color: Colors.grey)),
                         ],
                       ),
                     ),
@@ -294,7 +259,7 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                     child: Column(
                       children: [
                         const TabBar(
-                          labelColor: Colors.purple, unselectedLabelColor: Colors.grey, indicatorColor: Colors.purple,
+                          labelColor: Colors.teal, unselectedLabelColor: Colors.grey, indicatorColor: Colors.teal,
                           tabs: [Tab(text: "Checklist"), Tab(text: "Anotações")],
                         ),
                         Expanded(
@@ -305,7 +270,7 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                                 itemBuilder: (context, index) {
                                   return CheckboxListTile(
                                     title: Text(listaEtapas[index], style: TextStyle(fontWeight: etapasTemp[index] ? FontWeight.normal : FontWeight.bold, decoration: etapasTemp[index] ? TextDecoration.lineThrough : null, color: etapasTemp[index] ? Colors.grey : (isEscuro ? Colors.white : Colors.black87))),
-                                    value: etapasTemp[index], activeColor: Colors.purple, checkColor: Colors.white, side: BorderSide(color: isEscuro ? Colors.grey.shade400 : Colors.grey.shade700),
+                                    value: etapasTemp[index], activeColor: Colors.teal, checkColor: Colors.white, side: BorderSide(color: isEscuro ? Colors.grey.shade400 : Colors.grey.shade700),
                                     onChanged: (bool? valor) => setStateModal(() => etapasTemp[index] = valor ?? false),
                                   );
                                 },
@@ -326,7 +291,7 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                                                 child: Column(
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
-                                                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(nota['autor'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.purple.shade300)), Text(nota['data'], style: const TextStyle(fontSize: 10, color: Colors.grey))]),
+                                                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(nota['autor'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal.shade300)), Text(nota['data'], style: const TextStyle(fontSize: 10, color: Colors.grey))]),
                                                     const SizedBox(height: 4),
                                                     Text(nota['texto'], style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontSize: 14)),
                                                   ],
@@ -340,10 +305,10 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                                     children: [
                                       Expanded(child: TextField(controller: notaCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(hintText: "Deixar uma nota...", hintStyle: const TextStyle(color: Colors.grey), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none)))),
                                       const SizedBox(width: 8),
-                                      CircleAvatar(backgroundColor: Colors.purple, child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 18), onPressed: () {
+                                      CircleAvatar(backgroundColor: Colors.teal, child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 18), onPressed: () {
                                         if(notaCtrl.text.trim().isEmpty) return;
                                         setStateModal(() {
-                                          notas.add({'data': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}", 'autor': 'Pres. de Estaca', 'texto': notaCtrl.text.trim()});
+                                          notas.add({'data': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}", 'autor': 'Gestor Geral', 'texto': notaCtrl.text.trim()});
                                           notaCtrl.clear();
                                         });
                                       }))
@@ -363,7 +328,7 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                   children: [
                     Expanded(child: OutlinedButton.icon(onPressed: jovem['telefone'].toString().isEmpty ? null : () async {
                       String numero = jovem['telefone'].replaceAll(RegExp(r'[^0-9]'), '');
-                      final Uri url = Uri.parse('https://wa.me/$numero?text=${Uri.encodeComponent("Olá, ${jovem['nome']}! Sou da presidência da estaca e estou acompanhando seu processo.")}');
+                      final Uri url = Uri.parse('https://wa.me/$numero?text=${Uri.encodeComponent("Olá, ${jovem['nome']}! Sou da liderança geral e estou acompanhando seu processo.")}');
                       // ignore: empty_catches
                       try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch(e){}
                     }, icon: const Icon(Icons.chat, color: Colors.green), label: const Text("WhatsApp", style: TextStyle(color: Colors.green)), style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.green), padding: const EdgeInsets.symmetric(vertical: 14)))),
@@ -373,16 +338,12 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                         jovem['etapas'] = List<bool>.from(etapasTemp);
                         jovem['anotacoes'] = notas;
                         jovem['ultima_atualizacao'] = DateTime.now();
-                        
                         double progFinal = _calcularProgresso(jovem['etapas'], jovem['sexo']);
-                        if (progFinal == 1.0) {
-                          jovem['status'] = 'Enviado';
-                        } else if (progFinal > 0.0) {
-                          jovem['status'] = 'Preparação';
-                        }
+                        if (progFinal == 1.0) { jovem['status'] = 'Enviado'; } 
+                        else if (progFinal > 0.0) { jovem['status'] = 'Preparação'; }
                       });
                       Navigator.pop(context);
-                    }, icon: const Icon(Icons.save), label: const Text("Salvar"), style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)))),
+                    }, icon: const Icon(Icons.save), label: const Text("Salvar"), style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)))),
                   ],
                 )
               ],
@@ -391,13 +352,6 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
         });
       }
     );
-  }
-
-  void _iniciarPreparacao(Map<String, dynamic> jovem) {
-    setState(() {
-      jovem['status'] = 'Preparação';
-      jovem['ultima_atualizacao'] = DateTime.now();
-    });
   }
 
   @override
@@ -412,19 +366,22 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
     int totalPreparacao = _todosJovens.where((j) => j['status'] == 'Preparação').length;
     int totalEnviados = _todosJovens.where((j) => j['status'] == 'Enviado').length;
 
-    Map<String, List<Map<String, dynamic>>> arvoreJovens = {};
+    // Árvore em Cascata Dupla: Estaca > Ala > Jovens
+    Map<String, Map<String, List<Map<String, dynamic>>>> arvoreGlobal = {};
     for (var jovem in jovensFiltrados) {
-      arvoreJovens.putIfAbsent(jovem['unidade'], () => []).add(jovem);
+      String estaca = jovem['estaca'] ?? 'Outras';
+      String unidade = jovem['unidade'] ?? 'Geral';
+      arvoreGlobal.putIfAbsent(estaca, () => {});
+      arvoreGlobal[estaca]!.putIfAbsent(unidade, () => []).add(jovem);
     }
-    List<String> unidadesOrdenadas = arvoreJovens.keys.toList()..sort();
-    List<Map<String, dynamic>> gargalos = _calcularGargalos();
+    List<String> estacasOrdenadas = arvoreGlobal.keys.toList()..sort();
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(automaticallyImplyLeading: false, title: Text('Painel $_minhaEstaca', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), backgroundColor: corFundo, elevation: 1),
+      appBar: AppBar(automaticallyImplyLeading: false, title: Text('Painel do Gestor Geral', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), backgroundColor: corFundo, elevation: 1),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _mostrarFormularioJovem(),
-        backgroundColor: Colors.purple, foregroundColor: Colors.white,
+        backgroundColor: Colors.teal, foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add), label: const Text("Criar Jovem", style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: Column(
@@ -441,79 +398,69 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
               ],
             ),
           ),
-          
-          if (gargalos.isNotEmpty && _termoBusca.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(16), margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(color: corFundo, borderRadius: BorderRadius.circular(16), border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.analytics, color: Colors.purple, size: 20), const SizedBox(width: 8),
-                      Text("Atenção (Gargalos)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ...gargalos.map((g) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(g['etapa'], style: TextStyle(fontSize: 12, color: isEscuro ? Colors.white70 : Colors.black87)), Text("${(g['porcentagem'] * 100).toInt()}% (${g['quantidade']})", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey))]),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(value: g['porcentagem'], backgroundColor: isEscuro ? Colors.white12 : Colors.grey.shade200, color: Colors.redAccent, minHeight: 6, borderRadius: BorderRadius.circular(4)),
-                      ],
-                    ),
-                  ))
-                ],
-              ),
-            ),
 
           Container(
-            color: corFundo, padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8), margin: const EdgeInsets.only(top: 8),
+            color: corFundo, padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
             child: TextField(
               style: TextStyle(color: corTexto), onChanged: (valor) => setState(() => _termoBusca = valor),
-              decoration: InputDecoration(hintText: "Pesquisar jovem na estaca...", hintStyle: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey), prefixIcon: Icon(Icons.search, color: isEscuro ? Colors.white54 : Colors.grey), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, contentPadding: const EdgeInsets.symmetric(vertical: 0), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+              decoration: InputDecoration(hintText: "Pesquisar em todas as estacas...", hintStyle: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey), prefixIcon: Icon(Icons.search, color: isEscuro ? Colors.white54 : Colors.grey), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, contentPadding: const EdgeInsets.symmetric(vertical: 0), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
             ),
           ),
           
           Expanded(
-            child: arvoreJovens.isEmpty
+            child: arvoreGlobal.isEmpty
                 ? Center(child: Text("Nenhum jovem encontrado.", style: TextStyle(color: Colors.grey.shade500)))
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16), itemCount: unidadesOrdenadas.length,
-                    itemBuilder: (context, index) {
-                      String unidade = unidadesOrdenadas[index];
-                      List<Map<String, dynamic>> jovensDaUnidade = arvoreJovens[unidade]!;
+                    padding: const EdgeInsets.all(16), itemCount: estacasOrdenadas.length,
+                    itemBuilder: (context, indexEstaca) {
+                      String estaca = estacasOrdenadas[indexEstaca];
+                      Map<String, List<Map<String, dynamic>>> alasDaEstaca = arvoreGlobal[estaca]!;
+                      List<String> alasOrdenadas = alasDaEstaca.keys.toList()..sort();
+                      int totalNaEstaca = alasDaEstaca.values.fold(0, (soma, lista) => soma + lista.length);
 
                       return Card(
                         color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
                         child: Theme(
                           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          
+                          // NÍVEL 1: ESTACA
                           child: ExpansionTile(
-                            initiallyExpanded: _termoBusca.isNotEmpty, iconColor: Colors.orange, collapsedIconColor: Colors.grey, leading: const Icon(Icons.church, color: Colors.orange),
-                            title: Text(unidade, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: corTexto)), subtitle: Text("${jovensDaUnidade.length} jovem(ns)", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey, fontSize: 12)),
-                            children: jovensDaUnidade.map((jovem) {
-                              final estilo = _obterEstiloStatus(jovem['status']);
-                              return Container(
-                                decoration: BoxDecoration(border: Border(top: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade100))),
-                                child: ListTile(
-                                  onTap: () => _abrirDetalhesJovem(jovem),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                                  leading: Icon(estilo['icone'], color: estilo['cor'], size: 20),
-                                  title: Text(jovem['nome'], style: TextStyle(fontWeight: FontWeight.w600, color: corTexto)),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text("${jovem['idade']} anos", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey, fontSize: 12)),
-                                      _construirAlertaEstagnacao(jovem['ultima_atualizacao']),
-                                    ],
-                                  ),
-                                  trailing: jovem['status'] == 'Perspectiva' 
-                                    ? OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.orange, side: const BorderSide(color: Colors.orange), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), onPressed: () => _iniciarPreparacao(jovem), child: const Text("Iniciar", style: TextStyle(fontSize: 10)))
-                                    : Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: estilo['cor'].withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Text(jovem['status'], style: TextStyle(fontSize: 10, color: estilo['cor'], fontWeight: FontWeight.bold))),
+                            initiallyExpanded: _termoBusca.isNotEmpty, iconColor: Colors.teal, collapsedIconColor: Colors.grey,
+                            leading: CircleAvatar(backgroundColor: Colors.teal.withValues(alpha: 0.15), child: const Icon(Icons.map, color: Colors.teal)),
+                            title: Text(estaca, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+                            subtitle: Text("$totalNaEstaca jovem(ns) na região", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey.shade600, fontSize: 13)),
+                            
+                            // NÍVEL 2: ALAS
+                            children: alasOrdenadas.map((unidade) {
+                              List<Map<String, dynamic>> jovensDaUnidade = alasDaEstaca[unidade]!;
+                              return Padding(
+                                padding: const EdgeInsets.only(left: 16.0),
+                                child: ExpansionTile(
+                                  initiallyExpanded: _termoBusca.isNotEmpty, iconColor: Colors.orange, collapsedIconColor: Colors.grey, leading: const Icon(Icons.church, color: Colors.orange),
+                                  title: Text(unidade, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: corTexto)),
+                                  subtitle: Text("${jovensDaUnidade.length} jovem(ns)", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey, fontSize: 12)),
+                                  
+                                  // NÍVEL 3: JOVENS
+                                  children: jovensDaUnidade.map((jovem) {
+                                    final estilo = _obterEstiloStatus(jovem['status']);
+                                    return Container(
+                                      decoration: BoxDecoration(border: Border(top: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade100))),
+                                      child: ListTile(
+                                        onTap: () => _abrirDetalhesJovem(jovem),
+                                        contentPadding: const EdgeInsets.only(left: 32, right: 16, top: 4, bottom: 4),
+                                        leading: Icon(estilo['icone'], color: estilo['cor'], size: 20),
+                                        title: Text(jovem['nome'], style: TextStyle(fontWeight: FontWeight.w600, color: corTexto)),
+                                        subtitle: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text("${jovem['idade']} anos", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey, fontSize: 12)),
+                                            _construirAlertaEstagnacao(jovem['ultima_atualizacao']),
+                                          ],
+                                        ),
+                                        trailing: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: estilo['cor'].withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Text(jovem['status'], style: TextStyle(fontSize: 10, color: estilo['cor'], fontWeight: FontWeight.bold))),
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
                               );
                             }).toList(),

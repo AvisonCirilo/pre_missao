@@ -5,17 +5,47 @@ import '../chamados_enviados.dart';
 import '../../services/gerador_pdf.dart';
 
 class AbaPerfil extends StatefulWidget {
-  const AbaPerfil({super.key});
+  final String nivelAcesso; // Recebe o nível de acesso
+
+  const AbaPerfil({super.key, required this.nivelAcesso});
 
   @override
   State<AbaPerfil> createState() => _AbaPerfilState();
 }
 
 class _AbaPerfilState extends State<AbaPerfil> {
-  // Variáveis do Líder
-  final String _nomeLider = "Irmão Silva";
-  final String _cargoLider = "Bispo"; 
-  final String _unidadeLider = "Ala Centro - Estaca Norte";
+  String _nomeLider = "";
+  String _cargoLider = ""; 
+  String _unidadeLider = "";
+  Color _corPrincipal = Colors.blue;
+
+  @override
+  void initState() {
+    super.initState();
+    _configurarDadosPerfil();
+  }
+
+  // ==========================================
+  // ADAPTAÇÃO DINÂMICA DO PERFIL
+  // ==========================================
+  void _configurarDadosPerfil() {
+    if (widget.nivelAcesso == 'Estaca') {
+      _nomeLider = "Presidente Costa";
+      _cargoLider = "Presidente de Estaca";
+      _unidadeLider = "Estaca Norte";
+      _corPrincipal = Colors.purple;
+    } else if (widget.nivelAcesso == 'Admin') {
+      _nomeLider = "Administrador";
+      _cargoLider = "Admin Global do Sistema";
+      _unidadeLider = "Todas as Estacas";
+      _corPrincipal = Colors.green;
+    } else {
+      _nomeLider = "Bispo Silva";
+      _cargoLider = "Bispo";
+      _unidadeLider = "Ala Centro";
+      _corPrincipal = Colors.blue;
+    }
+  }
 
   Future<void> _abrirLink(String urlString) async {
     final Uri url = Uri.parse(urlString);
@@ -56,8 +86,8 @@ class _AbaPerfilState extends State<AbaPerfil> {
                 children: [
                   CircleAvatar(
                     radius: 50,
-                    backgroundColor: Colors.blue.withValues(alpha: 0.2),
-                    child: Text(_nomeLider[0], style: const TextStyle(fontSize: 40, color: Colors.blue, fontWeight: FontWeight.bold)),
+                    backgroundColor: _corPrincipal.withValues(alpha: 0.2),
+                    child: Text(_nomeLider[0], style: TextStyle(fontSize: 40, color: _corPrincipal, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(height: 15),
                   Text(_nomeLider, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: corTexto)),
@@ -66,11 +96,11 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
+                      color: _corPrincipal.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                      border: Border.all(color: _corPrincipal.withValues(alpha: 0.3)),
                     ),
-                    child: Text(_unidadeLider, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: Text(_unidadeLider, style: TextStyle(color: _corPrincipal, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ],
               ),
@@ -89,7 +119,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
               child: Column(
                 children: [
                   ListTile(
-                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.send, color: Colors.blue)),
+                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _corPrincipal.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: Icon(Icons.send, color: _corPrincipal)),
                     title: Text("Chamados Enviados", style: TextStyle(color: corTexto)),
                     subtitle: Text("Jovens que já finalizaram o processo", style: TextStyle(color: Colors.grey.shade500)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
@@ -104,7 +134,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   ListTile(
                     leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.picture_as_pdf, color: Colors.green)),
                     title: Text("Exportar Relatório (PDF)", style: TextStyle(color: corTexto)),
-                    subtitle: Text("Gera um resumo da ala para a Estaca", style: TextStyle(color: Colors.grey.shade500)),
+                    subtitle: Text("Gera um resumo gerencial", style: TextStyle(color: Colors.grey.shade500)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                     onTap: () async {
                       List<Map<String, dynamic>> jovensParaRelatorio = [
@@ -115,7 +145,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
                       ];
 
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando PDF...')));
-                      await GeradorPdf.gerarRelatorio(_unidadeLider.split(" - ")[0], jovensParaRelatorio);
+                      await GeradorPdf.gerarRelatorio(_unidadeLider, jovensParaRelatorio);
                     },
                   ),
                 ],
@@ -135,7 +165,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.public, color: Colors.blue),
+                    leading: Icon(Icons.public, color: _corPrincipal),
                     title: Text("Recursos de Líderes e Secretários", style: TextStyle(color: corTexto)),
                     trailing: const Icon(Icons.open_in_new, size: 16, color: Colors.grey),
                     onTap: () => _abrirLink('https://lcr.churchofjesuschrist.org/'),
@@ -159,7 +189,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   SwitchListTile(
                     secondary: const Icon(Icons.dark_mode, color: Colors.grey),
                     title: Text("Modo Escuro (Dark Mode)", style: TextStyle(color: corTexto)),
-                    activeColor: Colors.blue,
+                    activeThumbColor: _corPrincipal,
                     value: isEscuro, 
                     onChanged: (bool valor) {
                       temaGlobalNotifier.value = valor ? ThemeMode.dark : ThemeMode.light;
