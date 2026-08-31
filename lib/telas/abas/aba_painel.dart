@@ -1,5 +1,9 @@
+// ignore_for_file: empty_catches, curly_braces_in_flow_control_structures, deprecated_member_use, unnecessary_cast
+
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart'; 
 
 class AbaPainel extends StatefulWidget {
   const AbaPainel({super.key});
@@ -9,43 +13,68 @@ class AbaPainel extends StatefulWidget {
 }
 
 class _AbaPainelState extends State<AbaPainel> {
-  int _qtdEnviados = 0;
   String _filtroAtual = 'Todos';
+  
+  String _minhaEstaca = "";
+  String _minhaUnidade = "";
+  bool _carregandoPerfil = true;
 
   final List<String> _nomesEtapasRapazes = ["Aceitou o Desafio (Entrevistado)", "Ensino Médio Concluído", "Alistamento Militar", "Possui Mentor", "Metas com o Bispo", "Exame Médico", "Exame Odontológico", "Chamado Aberto no Sistema"];
   final List<String> _nomesEtapasMocas = ["Aceitou o Desafio (Entrevistado)", "Ensino Médio Concluído", "Possui Mentor", "Metas com o Bispo", "Exame Médico", "Exame Odontológico", "Chamado Aberto no Sistema"];
 
-  final List<Map<String, dynamic>> _jovensPreparacao = [
-    {
-      'id': '1', 'nome': 'João Silva', 'idade': 19, 'sexo': 'Masculino', 'telefone': '5591900000000', 
-      'etapas': <bool>[true, true, true, false, true, false, false, false],
-      'ultima_atualizacao': DateTime.now().subtract(const Duration(days: 45)), // Gera alerta
-      'anotacoes': [{'data': '10/07/2026', 'autor': 'Bispo Centro', 'texto': 'Aguardando agendar dentista.'}]
-    },
-    {
-      'id': '2', 'nome': 'Ana Beatriz', 'idade': 18, 'sexo': 'Feminino', 'telefone': '5591900000000', 
-      'etapas': <bool>[true, false, false, false, false, false, false],
-      'ultima_atualizacao': DateTime.now().subtract(const Duration(days: 5)),
-      'anotacoes': []
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _carregarPerfilLider(); 
+  }
 
-  final List<Map<String, dynamic>> _jovensPerspectiva = [
-    {'id': '3', 'nome': 'Lucas Souza', 'idade': 17, 'sexo': 'Masculino', 'telefone': ''},
-  ];
+  // ==========================================
+  // CARREGAMENTO SEGURO (À PROVA DE FALHAS)
+  // ==========================================
+  Future<void> _carregarPerfilLider() async {
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        var doc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          // Usa um Map para evitar travamentos caso falte algum campo no Firebase
+          var dados = doc.data() as Map<String, dynamic>? ?? {};
+          
+          setState(() {
+            _minhaEstaca = dados['estaca'] ?? "Global (Todas)";
+            _minhaUnidade = dados['unidade'] ?? "Global (Todas)";
+            _carregandoPerfil = false;
+          });
+        } else {
+          if (mounted) setState(() => _carregandoPerfil = false);
+        }
+      } else {
+        if (mounted) setState(() => _carregandoPerfil = false);
+      }
+    } catch (e) {
+      debugPrint("Erro na leitura do perfil: $e");
+      // Se der erro, desliga o carregamento de qualquer jeito para não travar a tela
+      if (mounted) setState(() => _carregandoPerfil = false);
+    }
+  }
 
   double _calcularProgresso(List<dynamic> etapas, String sexo) {
+    if (etapas.isEmpty) return 0.0;
     int concluidas = etapas.where((etapa) => etapa == true).length;
     int total = sexo == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
     return concluidas / total;
   }
 
   Map<String, dynamic> _obterStatusAtual(List<dynamic> etapas, String sexo) {
+    if (etapas.isEmpty) return {'texto': 'Iniciando...', 'cor': Colors.blue, 'icone': Icons.pending_actions};
     int concluidas = etapas.where((e) => e == true).length;
     List<String> listaEtapas = sexo == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
+    
     if (concluidas == listaEtapas.length) return {'texto': 'Pronto para Envio!', 'cor': Colors.green, 'icone': Icons.check_circle};
+    
     int indexPendente = etapas.indexOf(false);
     if(indexPendente == -1) return {'texto': 'Completo', 'cor': Colors.green, 'icone': Icons.check_circle};
+    
     String nomePendente = listaEtapas[indexPendente];
     Color cor;
     if (concluidas <= 2) { cor = Colors.blue; } else if (concluidas <= 5) { cor = Colors.orange; } else { cor = Colors.purple; }
@@ -77,10 +106,17 @@ class _AbaPainelState extends State<AbaPainel> {
     bool isEdicao = jovemAtual != null;
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     
+    bool isAdmin = _minhaUnidade == 'Global (Todas)'; 
+    
     final nomeCtrl = TextEditingController(text: isEdicao ? jovemAtual['nome'] : "");
     final idadeCtrl = TextEditingController(text: isEdicao ? jovemAtual['idade'].toString() : "");
-    final telefoneCtrl = TextEditingController(text: isEdicao ? jovemAtual['telefone'] : ""); 
-    String sexoSelecionado = isEdicao ? jovemAtual['sexo'] : "Masculino";
+    final telefoneCtrl = TextEditingController(text: isEdicao ? jovemAtual['telefone'] : "");
+    final estacaCtrl = TextEditingController(text: isEdicao ? (jovemAtual['estaca'] ?? "") : "");
+    final unidadeCtrl = TextEditingController(text: isEdicao ? (jovemAtual['unidade'] ?? "") : "");
+    
+    String sexoSelecionado = isEdicao ? (jovemAtual['sexo'] ?? "Masculino") : "Masculino";
+
+    bool salvando = false;
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
@@ -89,68 +125,106 @@ class _AbaPainelState extends State<AbaPainel> {
           return Container(
             padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
             decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(width: 40, height: 4, decoration: BoxDecoration(color: isEscuro ? Colors.white24 : Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(isEdicao ? Icons.edit : Icons.person_add, color: Colors.blue),
-                    const SizedBox(width: 10),
-                    Text(isEdicao ? "Editar Jovem" : "Novo Jovem", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
-                  ],
-                ),
-                const SizedBox(height: 25),
-                TextField(
-                  controller: nomeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                  decoration: InputDecoration(labelText: "Nome do Jovem", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.person, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(flex: 2, child: TextField(controller: idadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.number, decoration: InputDecoration(labelText: "Idade", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.cake, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
-                    const SizedBox(width: 15),
-                    Expanded(flex: 3, child: DropdownButtonFormField<String>(
-                      initialValue: sexoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
-                      style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                      decoration: InputDecoration(filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                      items: ["Masculino", "Feminino"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: (val) => setStateModal(() => sexoSelecionado = val!),
-                    )),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.phone, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity, height: 50,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    onPressed: () {
-                      if (nomeCtrl.text.trim().isEmpty) return;
-                      setState(() {
-                        if (isEdicao) {
-                          jovemAtual['nome'] = nomeCtrl.text.trim();
-                          jovemAtual['idade'] = int.tryParse(idadeCtrl.text) ?? 0;
-                          jovemAtual['telefone'] = telefoneCtrl.text.trim();
-                          if (jovemAtual['sexo'] != sexoSelecionado) {
-                            jovemAtual['sexo'] = sexoSelecionado;
-                            int totalEtapas = sexoSelecionado == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
-                            jovemAtual['etapas'] = List.generate(totalEtapas, (index) => false);
-                          }
-                        } else {
-                          _jovensPerspectiva.add({'id': DateTime.now().millisecondsSinceEpoch.toString(), 'nome': nomeCtrl.text.trim(), 'idade': int.tryParse(idadeCtrl.text) ?? 0, 'sexo': sexoSelecionado, 'telefone': telefoneCtrl.text.trim(), 'ultima_atualizacao': DateTime.now(), 'anotacoes': []});
-                        }
-                      });
-                      Navigator.pop(context); 
-                    },
-                    icon: const Icon(Icons.save),
-                    label: Text(isEdicao ? "Salvar" : "Adicionar Jovem", style: const TextStyle(fontWeight: FontWeight.bold)),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 40, height: 4, decoration: BoxDecoration(color: isEscuro ? Colors.white24 : Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(isEdicao ? Icons.edit : Icons.person_add, color: Colors.blue),
+                      const SizedBox(width: 10),
+                      Text(isEdicao ? "Editar Jovem" : "Novo Jovem", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 25),
+                  
+                  TextField(
+                    controller: nomeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(labelText: "Nome do Jovem", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.person, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  Row(
+                    children: [
+                      Expanded(flex: 2, child: TextField(controller: idadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.number, decoration: InputDecoration(labelText: "Idade", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.cake, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+                      const SizedBox(width: 15),
+                      Expanded(flex: 3, child: DropdownButtonFormField<String>(
+                        value: sexoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
+                        style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                        decoration: InputDecoration(filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                        items: ["Masculino", "Feminino"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                        onChanged: (val) => setStateModal(() => sexoSelecionado = val!),
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.phone, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+                  const SizedBox(height: 15),
+
+                  if (isAdmin)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 15),
+                      child: Row(
+                        children: [
+                          Expanded(child: TextField(controller: estacaCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Estaca", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.map, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+                          const SizedBox(width: 10),
+                          Expanded(child: TextField(controller: unidadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Ala/Ramo", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.church, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+                        ],
+                      ),
+                    ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  SizedBox(
+                    width: double.infinity, height: 50,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      onPressed: salvando ? null : () async {
+                        if (nomeCtrl.text.trim().isEmpty) return;
+                        setStateModal(() => salvando = true);
+
+                        try {
+                          int totalEtapas = sexoSelecionado == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
+                          
+                          Map<String, dynamic> dados = {
+                            'nome': nomeCtrl.text.trim(),
+                            'idade': int.tryParse(idadeCtrl.text) ?? 0,
+                            'sexo': sexoSelecionado,
+                            'telefone': telefoneCtrl.text.trim(),
+                            'estaca': isAdmin ? estacaCtrl.text.trim() : _minhaEstaca,
+                            'unidade': isAdmin ? unidadeCtrl.text.trim() : _minhaUnidade,
+                          };
+
+                          if (isEdicao) {
+                            if (jovemAtual['sexo'] != sexoSelecionado) {
+                              dados['etapas'] = List.generate(totalEtapas, (index) => false);
+                              dados['status'] = 'Perspectiva';
+                            }
+                            await FirebaseFirestore.instance.collection('jovens').doc(jovemAtual['id']).update(dados);
+                          } else {
+                            dados['status'] = 'Perspectiva';
+                            dados['etapas'] = List.generate(totalEtapas, (index) => false);
+                            dados['anotacoes'] = [];
+                            dados['ultima_atualizacao'] = FieldValue.serverTimestamp();
+                            await FirebaseFirestore.instance.collection('jovens').add(dados);
+                          }
+
+                          if (context.mounted) Navigator.pop(context);
+                        } catch(e) {
+                          setStateModal(() => salvando = false);
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.redAccent));
+                        }
+                      },
+                      icon: salvando ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.save),
+                      label: Text(isEdicao ? "Salvar Alterações" : "Adicionar Jovem", style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         });
@@ -159,8 +233,11 @@ class _AbaPainelState extends State<AbaPainel> {
   }
 
   void _abrirPainelDoJovem(Map<String, dynamic> jovem) {
-    List<bool> etapasTemp = List<bool>.from(jovem['etapas']); 
+    List<bool> etapasTemp = List<bool>.from(jovem['etapas'] ?? []); 
     List<String> listaEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
+    
+    while(etapasTemp.length < listaEtapas.length) { etapasTemp.add(false); }
+    
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     TextEditingController notaCtrl = TextEditingController();
 
@@ -192,6 +269,7 @@ class _AbaPainelState extends State<AbaPainel> {
                         ],
                       ),
                     ),
+                    IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: () { Navigator.pop(context); _mostrarFormularioJovem(jovemAtual: jovem); }),
                     Stack(
                       alignment: Alignment.center,
                       children: [
@@ -227,7 +305,7 @@ class _AbaPainelState extends State<AbaPainel> {
                               Column(
                                 children: [
                                   Expanded(
-                                    child: notas.isEmpty 
+                                    child: notas.isEmpty
                                       ? const Center(child: Text("Nenhuma anotação.", style: TextStyle(color: Colors.grey)))
                                       : ListView.builder(
                                           padding: const EdgeInsets.only(top: 10), itemCount: notas.length,
@@ -257,7 +335,7 @@ class _AbaPainelState extends State<AbaPainel> {
                                       CircleAvatar(backgroundColor: Colors.blue, child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 18), onPressed: () {
                                         if(notaCtrl.text.trim().isEmpty) return;
                                         setStateModal(() {
-                                          notas.add({'data': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}", 'autor': 'Bispo Atual', 'texto': notaCtrl.text.trim()});
+                                          notas.add({'data': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}", 'autor': 'Líder Local', 'texto': notaCtrl.text.trim()});
                                           notaCtrl.clear();
                                         });
                                       }))
@@ -277,15 +355,29 @@ class _AbaPainelState extends State<AbaPainel> {
                   children: [
                     Expanded(child: OutlinedButton.icon(onPressed: () => _chamarNoWhatsApp(jovem['nome'], jovem['telefone'], etapasTemp, listaEtapas), icon: const Icon(Icons.chat, color: Colors.green), label: const Text("WhatsApp", style: TextStyle(color: Colors.green)), style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.green), padding: const EdgeInsets.symmetric(vertical: 14)))),
                     const SizedBox(width: 10),
-                    Expanded(child: ElevatedButton.icon(onPressed: () {
-                      setState(() { 
-                        jovem['etapas'] = List<bool>.from(etapasTemp); 
-                        jovem['anotacoes'] = notas;
-                        jovem['ultima_atualizacao'] = DateTime.now(); // Reseta estagnação
-                      });
-                      Navigator.pop(context); 
-                      if (_calcularProgresso(jovem['etapas'], jovem['sexo']) == 1.0) { Future.delayed(const Duration(milliseconds: 300), () { setState(() { _jovensPreparacao.removeWhere((item) => item['id'] == jovem['id']); _qtdEnviados++; }); }); }
-                    }, icon: const Icon(Icons.save), label: const Text("Salvar"), style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)))),
+                    Expanded(child: ElevatedButton.icon(
+                      onPressed: () async {
+                        double progFinal = _calcularProgresso(etapasTemp, jovem['sexo']);
+                        String novoStatus = 'Perspectiva';
+                        if (progFinal == 1.0) novoStatus = 'Enviado';
+                        else if (progFinal > 0.0) novoStatus = 'Preparação';
+
+                        await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).update({
+                          'etapas': etapasTemp,
+                          'anotacoes': notas,
+                          'status': novoStatus,
+                          'ultima_atualizacao': FieldValue.serverTimestamp(),
+                        });
+
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salvo no banco de dados!'), backgroundColor: Colors.green));
+                        }
+                      }, 
+                      icon: const Icon(Icons.save), 
+                      label: const Text("Salvar Ficha"), 
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14))
+                    )),
                   ],
                 )
               ],
@@ -303,15 +395,13 @@ class _AbaPainelState extends State<AbaPainel> {
     String nomeEtapaPendente = indexPendente != -1 ? listaEtapas[indexPendente] : "Enviou tudo";
     String mensagem = "Olá, $nome! Tudo bem? Vi aqui que a sua próxima etapa é: *$nomeEtapaPendente*. Precisa de alguma ajuda com isso?";
     final Uri url = Uri.parse('https://wa.me/$numeroLimpo?text=${Uri.encodeComponent(mensagem)}');
-    // ignore: empty_catches
-    try { if (!await launchUrl(url, mode: LaunchMode.externalApplication)) throw Exception(); } catch (e) { }
+    try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch (e) {}
   }
 
-  void _iniciarPreparacao(Map<String, dynamic> jovem) {
-    setState(() {
-      _jovensPerspectiva.removeWhere((item) => item['id'] == jovem['id']);
-      int totalEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
-      _jovensPreparacao.add({'id': jovem['id'], 'nome': jovem['nome'], 'idade': jovem['idade'], 'sexo': jovem['sexo'], 'telefone': jovem['telefone'] ?? '', 'etapas': List.generate(totalEtapas, (index) => false), 'ultima_atualizacao': DateTime.now(), 'anotacoes': []});
+  void _iniciarPreparacao(Map<String, dynamic> jovem) async {
+    await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).update({
+      'status': 'Preparação',
+      'ultima_atualizacao': FieldValue.serverTimestamp(),
     });
   }
 
@@ -321,84 +411,128 @@ class _AbaPainelState extends State<AbaPainel> {
     Color corFundo = isEscuro ? const Color(0xFF1E1E1E) : Colors.white;
     Color corTexto = isEscuro ? Colors.white : Colors.black;
 
-    List<Map<String, dynamic>> listaFiltrada = _jovensPreparacao.where((jovem) {
-      if (_filtroAtual == 'Todos') return true;
-      List<String> listaEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
-      int indexFiltro = listaEtapas.indexOf(_filtroAtual);
-      if (indexFiltro == -1) return false; 
-      return jovem['etapas'][indexFiltro] == false;
-    }).toList();
+    if (_carregandoPerfil) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        appBar: AppBar(backgroundColor: corFundo, elevation: 1),
+        body: const Center(child: CircularProgressIndicator(color: Colors.blue)),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(automaticallyImplyLeading: false, title: Text('Visão Geral da Ala', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), backgroundColor: corFundo, elevation: 1),
+      appBar: AppBar(
+        automaticallyImplyLeading: false, 
+        title: Text(_minhaUnidade == 'Global (Todas)' ? 'Visão Geral do Sistema' : 'Visão Geral - $_minhaUnidade', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), 
+        backgroundColor: corFundo, 
+        elevation: 1
+      ),
       floatingActionButton: FloatingActionButton.extended(onPressed: () => _mostrarFormularioJovem(), backgroundColor: Colors.blue, foregroundColor: Colors.white, icon: const Icon(Icons.person_add), label: const Text("Novo Jovem", style: TextStyle(fontWeight: FontWeight.bold))),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(padding: const EdgeInsets.all(16.0), child: Row(children: [_construirCartaoDashboard("Perspectiva", _jovensPerspectiva.length.toString(), Colors.orange, Icons.radar, isEscuro), const SizedBox(width: 10), _construirCartaoDashboard("Preparação", _jovensPreparacao.length.toString(), Colors.blue, Icons.assignment_ind, isEscuro), const SizedBox(width: 10), _construirCartaoDashboard("Enviados", _qtdEnviados.toString(), Colors.green, Icons.check_circle, isEscuro)])),
-            SizedBox(height: 40, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), children: ['Todos', 'Exame Médico', 'Exame Odontológico', 'Alistamento Militar'].map((f) => _construirFiltro(f, isEscuro)).toList())),
-            const SizedBox(height: 20),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Processo Iniciado", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTexto))),
-            const SizedBox(height: 10),
-            if (listaFiltrada.isEmpty) Padding(padding: const EdgeInsets.all(16.0), child: Text(_filtroAtual == 'Todos' ? "Nenhum jovem em preparação." : "Nenhum jovem pendente.", style: const TextStyle(color: Colors.grey)))
-            else ListView.builder(
-              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: listaFiltrada.length,
-              itemBuilder: (context, index) {
-                final jovem = listaFiltrada[index];
-                double progressoAtual = _calcularProgresso(jovem['etapas'], jovem['sexo']);
-                Map<String, dynamic> statusAtual = _obterStatusAtual(jovem['etapas'], jovem['sexo']);
-                return Card(
-                  color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
-                  child: InkWell( 
-                    onTap: () => _abrirPainelDoJovem(jovem), borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        children: [
-                          CircleAvatar(backgroundColor: statusAtual['cor'].withValues(alpha: 0.15), child: Text(jovem['nome'][0], style: TextStyle(color: statusAtual['cor'], fontWeight: FontWeight.bold))),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(jovem['nome'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
-                                const SizedBox(height: 4),
-                                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: statusAtual['cor'].withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(statusAtual['icone'], size: 12, color: statusAtual['cor']), const SizedBox(width: 4), Expanded(child: Text(statusAtual['texto'], style: TextStyle(fontSize: 11, color: statusAtual['cor'], fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))])),
-                                _construirAlertaEstagnacao(jovem['ultima_atualizacao'])
-                              ],
-                            ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('jovens').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.blue));
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Nenhum jovem cadastrado ainda.", style: TextStyle(color: Colors.grey)));
+
+          List<Map<String, dynamic>> todosJovens = snapshot.data!.docs.map((doc) {
+            var dados = doc.data() as Map<String, dynamic>;
+            dados['id'] = doc.id;
+            return dados;
+          }).where((jovem) {
+            if (_minhaUnidade == 'Global (Todas)') return true; 
+            return jovem['unidade'] == _minhaUnidade; 
+          }).toList();
+
+          List<Map<String, dynamic>> jovensPerspectiva = todosJovens.where((j) => j['status'] == 'Perspectiva').toList();
+          List<Map<String, dynamic>> jovensPreparacao = todosJovens.where((j) => j['status'] == 'Preparação').toList();
+          List<Map<String, dynamic>> jovensEnviados = todosJovens.where((j) => j['status'] == 'Enviado').toList();
+
+          List<Map<String, dynamic>> listaFiltrada = jovensPreparacao.where((jovem) {
+            if (_filtroAtual == 'Todos') return true;
+            List<String> listaEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
+            int indexFiltro = listaEtapas.indexOf(_filtroAtual);
+            if (indexFiltro == -1) return false;
+            
+            List<dynamic> etapasJovem = jovem['etapas'] ?? [];
+            if(indexFiltro >= etapasJovem.length) return true; 
+            return etapasJovem[indexFiltro] == false;
+          }).toList();
+
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(padding: const EdgeInsets.all(16.0), child: Row(children: [_construirCartaoDashboard("Perspectiva", jovensPerspectiva.length.toString(), Colors.orange, Icons.radar, isEscuro), const SizedBox(width: 10), _construirCartaoDashboard("Preparação", jovensPreparacao.length.toString(), Colors.blue, Icons.assignment_ind, isEscuro), const SizedBox(width: 10), _construirCartaoDashboard("Enviados", jovensEnviados.length.toString(), Colors.green, Icons.check_circle, isEscuro)])),
+                SizedBox(height: 40, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), children: ['Todos', 'Exame Médico', 'Exame Odontológico', 'Alistamento Militar'].map((f) => _construirFiltro(f, isEscuro)).toList())),
+                const SizedBox(height: 20),
+                
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Processo Iniciado", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTexto))),
+                const SizedBox(height: 10),
+                if (listaFiltrada.isEmpty) Padding(padding: const EdgeInsets.all(16.0), child: Text(_filtroAtual == 'Todos' ? "Nenhum jovem em preparação." : "Nenhum jovem pendente.", style: const TextStyle(color: Colors.grey)))
+                else ListView.builder(
+                  shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: listaFiltrada.length,
+                  itemBuilder: (context, index) {
+                    final jovem = listaFiltrada[index];
+                    List<dynamic> etapasJov = jovem['etapas'] ?? [];
+                    double progressoAtual = _calcularProgresso(etapasJov, jovem['sexo']);
+                    Map<String, dynamic> statusAtual = _obterStatusAtual(etapasJov, jovem['sexo']);
+                    
+                    DateTime? ultimaAtt;
+                    if (jovem['ultima_atualizacao'] != null) ultimaAtt = (jovem['ultima_atualizacao'] as Timestamp).toDate();
+
+                    return Card(
+                      color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
+                      child: InkWell(
+                        onTap: () => _abrirPainelDoJovem(jovem), borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            children: [
+                              CircleAvatar(backgroundColor: statusAtual['cor'].withValues(alpha: 0.15), child: Text(jovem['nome'][0], style: TextStyle(color: statusAtual['cor'], fontWeight: FontWeight.bold))),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(jovem['nome'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+                                    const SizedBox(height: 4),
+                                    Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: statusAtual['cor'].withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(statusAtual['icone'], size: 12, color: statusAtual['cor']), const SizedBox(width: 4), Expanded(child: Text(statusAtual['texto'], style: TextStyle(fontSize: 11, color: statusAtual['cor'], fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis))])),
+                                    _construirAlertaEstagnacao(ultimaAtt)
+                                  ],
+                                ),
+                              ),
+                              Stack(alignment: Alignment.center, children: [SizedBox(height: 45, width: 45, child: CircularProgressIndicator(value: progressoAtual, backgroundColor: isEscuro ? Colors.black26 : Colors.grey.shade200, color: statusAtual['cor'], strokeWidth: 4)), Text("${(progressoAtual * 100).toInt()}%", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: corTexto))])
+                            ],
                           ),
-                          Stack(alignment: Alignment.center, children: [SizedBox(height: 45, width: 45, child: CircularProgressIndicator(value: progressoAtual, backgroundColor: isEscuro ? Colors.black26 : Colors.grey.shade200, color: statusAtual['cor'], strokeWidth: 4)), Text("${(progressoAtual * 100).toInt()}%", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: corTexto))])
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+                
+                const SizedBox(height: 25),
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Missionários em Perspectiva", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTexto))),
+                const SizedBox(height: 10),
+                if (jovensPerspectiva.isEmpty) const Padding(padding: EdgeInsets.all(16.0), child: Text("Nenhum missionário em perspectiva.", style: TextStyle(color: Colors.grey)))
+                else ListView.builder(
+                  shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: jovensPerspectiva.length,
+                  itemBuilder: (context, index) {
+                    final jovem = jovensPerspectiva[index];
+                    return Card(
+                      color: corFundo, margin: const EdgeInsets.only(bottom: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
+                      child: ListTile(
+                        onTap: () => _mostrarFormularioJovem(jovemAtual: jovem), 
+                        leading: const Icon(Icons.person, color: Colors.orange), title: Text(jovem['nome'], style: TextStyle(fontWeight: FontWeight.w600, color: corTexto)), subtitle: Text("${jovem['idade']} anos", style: const TextStyle(color: Colors.grey)),
+                        trailing: OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.orange, side: const BorderSide(color: Colors.orange), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), onPressed: () => _iniciarPreparacao(jovem), child: const Text("Iniciar", style: TextStyle(fontSize: 12))),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 80),
+              ],
             ),
-            const SizedBox(height: 25),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Missionários em Perspectiva", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTexto))),
-            const SizedBox(height: 10),
-            if (_jovensPerspectiva.isEmpty) const Padding(padding: EdgeInsets.all(16.0), child: Text("Nenhum missionário em perspectiva.", style: TextStyle(color: Colors.grey)))
-            else ListView.builder(
-              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: _jovensPerspectiva.length,
-              itemBuilder: (context, index) {
-                final jovem = _jovensPerspectiva[index];
-                return Card(
-                  color: corFundo, margin: const EdgeInsets.only(bottom: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
-                  child: ListTile(
-                    onTap: () => _mostrarFormularioJovem(jovemAtual: jovem), 
-                    leading: const Icon(Icons.person, color: Colors.orange), title: Text(jovem['nome'], style: TextStyle(fontWeight: FontWeight.w600, color: corTexto)), subtitle: Text("${jovem['idade']} anos", style: const TextStyle(color: Colors.grey)),
-                    trailing: OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.orange, side: const BorderSide(color: Colors.orange), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), onPressed: () => _iniciarPreparacao(jovem), child: const Text("Iniciar", style: TextStyle(fontSize: 12))),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 80),
-          ],
-        ),
+          );
+        }
       ),
     );
   }

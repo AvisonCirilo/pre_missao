@@ -1,7 +1,10 @@
+// ignore_for_file: duplicate_ignore, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'home_tela.dart';
+// ignore: unused_import
 import 'recuperar_senha.dart';
 
 class LoginPage extends StatefulWidget {
@@ -49,18 +52,22 @@ class _LoginPageState extends State<LoginPage> {
           await FirebaseFirestore.instance.collection('usuarios').doc(userCredential.user!.uid).set({
             'nome': 'Admin Principal', 'usuario': 'admin', 'cargo': 'Admin', 'nivel_acesso': 'Admin', 'unidade': 'Global',
           });
+          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ficha restaurada! Clique em ENTRAR novamente."), backgroundColor: Colors.green));
           await FirebaseAuth.instance.signOut();
         } else {
+          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ficha não encontrada."), backgroundColor: Colors.redAccent));
           await FirebaseAuth.instance.signOut();
         }
       }
 
+    // ignore: unused_catch_clause
     } on FirebaseAuthException catch (e) {
       if (inputUsuario == 'admin' && senha == 'missao2026') {
          await _criarPrimeiroAdmin(emailFormatado, senha);
       } else {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Usuário ou senha incorretos.'), backgroundColor: Colors.redAccent));
       }
     } catch (e) {

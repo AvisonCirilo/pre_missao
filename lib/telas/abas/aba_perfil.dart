@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../main.dart'; 
 import '../chamados_enviados.dart';
 import '../../services/gerador_pdf.dart';
@@ -18,35 +19,93 @@ class _AbaPerfilState extends State<AbaPerfil> {
   String _nomeLider = "";
   String _cargoLider = ""; 
   String _unidadeLider = "";
+  String _estacaLider = "";
   Color _corPrincipal = Colors.blue;
+  bool _carregando = true;
 
   @override
   void initState() {
     super.initState();
-    _configurarDadosPerfil();
+    _carregarPerfilBanco();
   }
 
-  void _configurarDadosPerfil() {
-    if (widget.nivelAcesso == 'Estaca') {
-      _nomeLider = "Presidente Costa";
-      _cargoLider = "Presidente de Estaca";
-      _unidadeLider = "Estaca Norte";
-      _corPrincipal = Colors.purple;
-    } else if (widget.nivelAcesso == 'Gestor') {
-      _nomeLider = "Gestor Geral";
-      _cargoLider = "Conselho Geral";
-      _unidadeLider = "Global";
-      _corPrincipal = Colors.teal;
-    } else if (widget.nivelAcesso == 'Admin') {
-      _nomeLider = "Administrador";
-      _cargoLider = "Admin Global do Sistema";
-      _unidadeLider = "Todas as Estacas";
-      _corPrincipal = Colors.green;
-    } else {
-      _nomeLider = "Bispo Silva";
-      _cargoLider = "Bispo";
-      _unidadeLider = "Ala Centro";
-      _corPrincipal = Colors.blue;
+  // ==========================================
+  // CARREGA OS DADOS DO USUÁRIO LOGADO
+  // ==========================================
+  Future<void> _carregarPerfilBanco() async {
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        var doc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          var dados = doc.data() as Map<String, dynamic>;
+          
+          setState(() {
+            _nomeLider = dados['nome'] ?? "Líder Desconhecido";
+            _cargoLider = dados['cargo'] ?? "Líder";
+            _unidadeLider = dados['unidade'] ?? "Global (Todas)";
+            _estacaLider = dados['estaca'] ?? "Global (Todas)";
+
+            // Define a cor baseada no nível de acesso
+            if (widget.nivelAcesso == 'Estaca') {
+              _corPrincipal = Colors.purple;
+            } else if (widget.nivelAcesso == 'Gestor') {
+              _corPrincipal = Colors.teal;
+            } else if (widget.nivelAcesso == 'Admin') {
+              _corPrincipal = Colors.green;
+            } else {
+              _corPrincipal = Colors.blue;
+            }
+            
+            _carregando = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _carregando = false);
+      debugPrint("Erro ao carregar perfil: $e");
+    }
+  }
+
+  // ==========================================
+  // EXPORTAR PDF COM FILTRO INTELIGENTE
+  // ==========================================
+  Future<void> _gerarRelatorioInteligente() async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando dados e gerando PDF...'), duration: Duration(seconds: 2)));
+
+    try {
+      QuerySnapshot query;
+
+      // Filtra os jovens de acordo com o nível de acesso de quem clicou no botão!
+      if (widget.nivelAcesso == 'Admin' || widget.nivelAcesso == 'Gestor') {
+        query = await FirebaseFirestore.instance.collection('jovens').get();
+      } else if (widget.nivelAcesso == 'Estaca') {
+        query = await FirebaseFirestore.instance.collection('jovens').where('estaca', isEqualTo: _estacaLider).get();
+      } else {
+        query = await FirebaseFirestore.instance.collection('jovens').where('unidade', isEqualTo: _unidadeLider).get();
+      }
+
+      List<Map<String, dynamic>> jovensParaRelatorio = query.docs.map((doc) {
+        var j = doc.data() as Map<String, dynamic>;
+        return {
+          'nome': j['nome'] ?? 'Sem Nome',
+          'idade': j['idade'] ?? 0,
+          'status': j['status'] ?? 'Perspectiva',
+          'telefone': j['telefone'] ?? 'Não informado',
+          'data_envio': j['data_envio'] ?? 'Não registrada', 
+          'destino': j['destino'] ?? 'Aguardando Carta',
+        };
+      }).toList();
+
+      if (jovensParaRelatorio.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum jovem encontrado para exportar.'), backgroundColor: Colors.orange));
+        return;
+      }
+
+      await GeradorPdf.gerarRelatorio(_unidadeLider, jovensParaRelatorio);
+
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao gerar PDF: $e'), backgroundColor: Colors.redAccent));
     }
   }
 
@@ -57,11 +116,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
         throw Exception('Não foi possível abrir o link');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao abrir a página oficial.'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao abrir a página oficial.'), backgroundColor: Colors.red));
     }
   }
 
@@ -70,6 +125,14 @@ class _AbaPerfilState extends State<AbaPerfil> {
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     Color corFundo = isEscuro ? const Color(0xFF1E1E1E) : Colors.white;
     Color corTexto = isEscuro ? Colors.white : Colors.black87;
+
+    if (_carregando) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        appBar: AppBar(backgroundColor: corFundo, elevation: 1),
+        body: Center(child: CircularProgressIndicator(color: _corPrincipal)),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -90,7 +153,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   CircleAvatar(
                     radius: 50,
                     backgroundColor: _corPrincipal.withValues(alpha: 0.2),
-                    child: Text(_nomeLider[0], style: TextStyle(fontSize: 40, color: _corPrincipal, fontWeight: FontWeight.bold)),
+                    child: Text(_nomeLider.isNotEmpty ? _nomeLider[0].toUpperCase() : '?', style: TextStyle(fontSize: 40, color: _corPrincipal, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(height: 15),
                   Text(_nomeLider, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: corTexto)),
@@ -137,18 +200,9 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   ListTile(
                     leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.picture_as_pdf, color: Colors.green)),
                     title: Text("Exportar Relatório (PDF)", style: TextStyle(color: corTexto)),
-                    subtitle: Text("Gera um resumo gerencial", style: TextStyle(color: Colors.grey.shade500)),
+                    subtitle: Text("Gera um resumo gerencial da sua unidade", style: TextStyle(color: Colors.grey.shade500)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                    onTap: () async {
-                      List<Map<String, dynamic>> jovensParaRelatorio = [
-                        {'nome': 'João Silva', 'idade': 19, 'status': 'Aguardando Exames', 'telefone': '(91) 90000-0000'},
-                        {'nome': 'Lucas Souza', 'idade': 17, 'status': 'Perspectiva', 'telefone': '(91) 91111-1111'},
-                        {'nome': 'Ana Beatriz', 'idade': 18, 'status': 'Enviado', 'data_envio': '15/07/2026', 'destino': 'Missão Brasil São Paulo Sul'},
-                        {'nome': 'Marcos Paulo', 'idade': 20, 'status': 'Enviado', 'data_envio': '12/08/2026', 'destino': 'Aguardando Carta'},
-                      ];
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando PDF...')));
-                      await GeradorPdf.gerarRelatorio(_unidadeLider, jovensParaRelatorio);
-                    },
+                    onTap: _gerarRelatorioInteligente,
                   ),
                 ],
               ),
@@ -226,13 +280,8 @@ class _AbaPerfilState extends State<AbaPerfil> {
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
                           onPressed: () async {
-                            // 1. Fecha o modal de alerta
                             Navigator.pop(context);
-                            
-                            // 2. Realiza o logoff oficial no Firebase
                             await FirebaseAuth.instance.signOut();
-                            
-                            // 3. Volta para a Tela de Login limpando o histórico
                             if (context.mounted) {
                               Navigator.pushAndRemoveUntil(
                                 context,
