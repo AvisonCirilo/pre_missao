@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'admin/lista_jovens.dart';
 import 'admin/gestao_lideres.dart';
 import './admin/gestao_unidades.dart';
@@ -12,13 +12,15 @@ class AbaAdmin extends StatefulWidget {
 }
 
 class _AbaAdminState extends State<AbaAdmin> {
-  // WIDGET AUXILIAR: Cartões de Estatísticas Globais
+  // ==========================================
+  // WIDGET AUXILIAR: ESTATÍSTICAS EM TEMPO REAL (ATUALIZADO)
+  // ==========================================
   Widget _construirCardEstatistica(
     String titulo,
-    String valor,
     Color cor,
     IconData icone,
     bool isEscuro,
+    Stream<QuerySnapshot> streamBuscador, // Agora recebe a busca exata (com filtros)
   ) {
     return Expanded(
       child: Container(
@@ -37,35 +39,47 @@ class _AbaAdminState extends State<AbaAdmin> {
             ),
           ],
         ),
-        child: Column(
-          children: [
-            Icon(icone, color: cor, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              valor,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: isEscuro ? Colors.white : Colors.black,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              titulo,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.grey,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+        // O StreamBuilder escuta a busca específica
+        child: StreamBuilder<QuerySnapshot>(
+          stream: streamBuscador,
+          builder: (context, snapshot) {
+            String valor = "..."; 
+            if (snapshot.hasData) {
+              valor = snapshot.data!.docs.length.toString();
+            }
+            return Column(
+              children: [
+                Icon(icone, color: cor, size: 28),
+                const SizedBox(height: 8),
+                Text(
+                  valor,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: isEscuro ? Colors.white : Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  titulo,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            );
+          }
         ),
       ),
     );
   }
 
-  // WIDGET AUXILIAR: Botões de Ação do Menu
+  // ==========================================
+  // WIDGET AUXILIAR: BOTÕES DE MENU
+  // ==========================================
   Widget _construirBotaoAcao(
     String titulo,
     String subtitulo,
@@ -141,7 +155,7 @@ class _AbaAdminState extends State<AbaAdmin> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ==========================================
-            // 1. ESTATÍSTICAS GLOBAIS DA ESTACA/DISTRITO
+            // 1. ESTATÍSTICAS GLOBAIS (AGORA EM 4 BLOCOS)
             // ==========================================
             Text(
               "Visão Global do Sistema",
@@ -152,30 +166,48 @@ class _AbaAdminState extends State<AbaAdmin> {
               ),
             ),
             const SizedBox(height: 10),
+            
+            // Primeira linha: Líderes e Jovens
             Row(
               children: [
                 _construirCardEstatistica(
                   "Líderes",
-                  "8",
                   Colors.blue,
                   Icons.admin_panel_settings,
                   isEscuro,
+                  FirebaseFirestore.instance.collection('usuarios').snapshots(),
                 ),
                 const SizedBox(width: 10),
                 _construirCardEstatistica(
                   "Total Jovens",
-                  "32",
                   Colors.green,
                   Icons.groups,
                   isEscuro,
+                  FirebaseFirestore.instance.collection('jovens').snapshots(),
                 ),
-                const SizedBox(width: 10),
+              ],
+            ),
+            const SizedBox(height: 10),
+            
+            // Segunda linha: Alas/Ramos e Estacas
+            Row(
+              children: [
                 _construirCardEstatistica(
-                  "Alas/Ramos",
-                  "5",
+                  "Alas / Ramos",
                   Colors.orange,
                   Icons.church,
                   isEscuro,
+                  // Filtra apenas Alas e Ramos
+                  FirebaseFirestore.instance.collection('unidades').where('tipo', whereIn: ['Ala', 'Ramo']).snapshots(),
+                ),
+                const SizedBox(width: 10),
+                _construirCardEstatistica(
+                  "Estacas",
+                  Colors.purple,
+                  Icons.map,
+                  isEscuro,
+                  // Filtra apenas Estacas e similares
+                  FirebaseFirestore.instance.collection('unidades').where('tipo', whereIn: ['Estaca', 'Distrito', 'Missão']).snapshots(),
                 ),
               ],
             ),
@@ -208,11 +240,10 @@ class _AbaAdminState extends State<AbaAdmin> {
                 );
               },
             ),
-
             const SizedBox(height: 25),
 
             // ==========================================
-            // 3. ESTRUTURA DA ESTACA / DISTRITO
+            // 3. ESTRUTURA DA IGREJA
             // ==========================================
             Text(
               "Estrutura da Igreja",
@@ -230,7 +261,6 @@ class _AbaAdminState extends State<AbaAdmin> {
               Colors.orange,
               isEscuro,
               () {
-                // Essa é a navegação que abre a nova tela!
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -254,7 +284,6 @@ class _AbaAdminState extends State<AbaAdmin> {
                 );
               },
             ),
-
             const SizedBox(height: 25),
 
             // ==========================================
@@ -285,11 +314,10 @@ class _AbaAdminState extends State<AbaAdmin> {
               Icons.delete_sweep,
               Colors.redAccent,
               isEscuro,
-              () => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Acesso Restrito!'))),
+              () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Acesso Restrito!'))
+              ),
             ),
-
             const SizedBox(height: 40),
           ],
         ),

@@ -12,7 +12,35 @@ class GestaoLideresTela extends StatefulWidget {
 
 class _GestaoLideresTelaState extends State<GestaoLideresTela> {
   final List<String> _opcoesCargo = ['Bispo', 'Pres. de Ramo', 'Pres. de Estaca', 'Conselho Geral', 'Admin'];
-  final List<String> _opcoesUnidade = ['Ala Centro', 'Ala Sul', 'Ramo Leste', 'Estaca Norte', 'Distrito Sul', 'Global (Todas)'];
+  
+  // Dicionário invisível que organiza as Alas dentro das Estacas
+  Map<String, List<String>> _arvoreUnidades = {'Global (Todas)': ['Global (Todas)']};
+
+  @override
+  void initState() {
+    super.initState();
+    _construirArvoreDoBanco();
+  }
+
+  // Monta a estrutura em cascata lendo as Alas e Estacas criadas na tela de Unidades
+  void _construirArvoreDoBanco() {
+    FirebaseFirestore.instance.collection('unidades').snapshots().listen((snapshot) {
+      Map<String, List<String>> arvore = {'Global (Todas)': ['Global (Todas)']};
+      
+      for (var doc in snapshot.docs) {
+        String tipo = doc['tipo'] ?? '';
+        String nomeDaUnidade = "$tipo ${doc['nome']}";
+        String estacaPai = doc['estaca'] ?? 'Global (Todas)';
+
+        if (tipo == 'Estaca' || tipo == 'Distrito') {
+          arvore.putIfAbsent(nomeDaUnidade, () => [nomeDaUnidade]); 
+        } else if (tipo == 'Ala' || tipo == 'Ramo') {
+          arvore.putIfAbsent(estacaPai, () => [estacaPai]).add(nomeDaUnidade);
+        }
+      }
+      if (mounted) setState(() => _arvoreUnidades = arvore);
+    });
+  }
 
   String _obterNivelAcesso(String cargo) {
     if (cargo == 'Conselho Geral') return 'Gestor';
@@ -29,16 +57,20 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
 
     final nomeCtrl = TextEditingController(text: isEdicao ? dados!['nome'] : "");
     final usuarioCtrl = TextEditingController(text: isEdicao ? dados!['usuario'] : "");
-    final senhaCtrl = TextEditingController(); // Usado tanto para criar quanto para editar
+    final senhaCtrl = TextEditingController(); 
     final emailContatoCtrl = TextEditingController(text: isEdicao ? (dados!['email_contato'] ?? "") : "");
     final whatsappCtrl = TextEditingController(text: isEdicao ? (dados!['whatsapp'] ?? "") : "");
     
     String cargoSelecionado = isEdicao ? (dados!['cargo'] ?? _opcoesCargo[0]) : _opcoesCargo[0];
     if (!_opcoesCargo.contains(cargoSelecionado)) cargoSelecionado = _opcoesCargo[0]; 
 
-    String unidadeSelecionada = isEdicao ? (dados!['unidade'] ?? _opcoesUnidade[0]) : _opcoesUnidade[0];
-    if (unidadeSelecionada == 'Global') unidadeSelecionada = 'Global (Todas)';
-    else if (!_opcoesUnidade.contains(unidadeSelecionada)) unidadeSelecionada = _opcoesUnidade[0];
+    // Lógica em Cascata Inicial
+    String estacaSelecionada = isEdicao ? (dados!['estaca'] ?? _arvoreUnidades.keys.first) : _arvoreUnidades.keys.first;
+    if (!_arvoreUnidades.containsKey(estacaSelecionada)) estacaSelecionada = _arvoreUnidades.keys.first;
+
+    List<String> listaAlas = _arvoreUnidades[estacaSelecionada]!;
+    String unidadeSelecionada = isEdicao ? (dados!['unidade'] ?? listaAlas.first) : listaAlas.first;
+    if (!listaAlas.contains(unidadeSelecionada)) unidadeSelecionada = listaAlas.first;
 
     bool salvando = false;
 
@@ -75,35 +107,47 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                     _construirCampoTexto("Usuário de Login (Ex: bispo.centro)", usuarioCtrl, Icons.account_circle, isEscuro, enabled: !isEdicao),
                     const SizedBox(height: 15),
 
-                    // CAMPO DE SENHA INTELIGENTE: Muda o texto se for criar ou editar
-                    _construirCampoTexto(
-                      isEdicao ? "Nova Senha (Deixe em branco para manter)" : "Senha Temporária (Mín. 6 letras)", 
-                      senhaCtrl, Icons.lock, isEscuro
+                    _construirCampoTexto(isEdicao ? "Nova Senha (Deixe em branco para manter)" : "Senha Temporária (Mín. 6 letras)", senhaCtrl, Icons.lock, isEscuro),
+                    const SizedBox(height: 15),
+
+                    DropdownButtonFormField<String>(
+                      value: cargoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                      decoration: InputDecoration(labelText: "Cargo", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.badge, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                      items: _opcoesCargo.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      onChanged: (val) {
+                        setStateModal(() {
+                          cargoSelecionado = val!;
+                          if (cargoSelecionado == 'Conselho Geral' || cargoSelecionado == 'Admin') {
+                            estacaSelecionada = 'Global (Todas)';
+                            listaAlas = _arvoreUnidades[estacaSelecionada]!;
+                            unidadeSelecionada = 'Global (Todas)';
+                          }
+                        });
+                      },
                     ),
                     const SizedBox(height: 15),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _construirDropdown("Cargo", cargoSelecionado, _opcoesCargo, Icons.badge, isEscuro, (val) {
-                            setStateModal(() {
-                              cargoSelecionado = val!;
-                              if (cargoSelecionado == 'Conselho Geral' || cargoSelecionado == 'Admin') {
-                                unidadeSelecionada = 'Global (Todas)';
-                              }
-                            });
-                          }),
-                        ),
-                      ],
+                    // DROPDOWN 1: ESCOLHER A ESTACA
+                    DropdownButtonFormField<String>(
+                      value: estacaSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                      decoration: InputDecoration(labelText: "Estaca da Liderança", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.map, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                      items: _arvoreUnidades.keys.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      onChanged: (val) {
+                        setStateModal(() {
+                          estacaSelecionada = val!;
+                          listaAlas = _arvoreUnidades[estacaSelecionada]!;
+                          unidadeSelecionada = listaAlas.first; // Reseta a Ala para a primeira da nova Estaca
+                        });
+                      },
                     ),
                     const SizedBox(height: 15),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _construirDropdown("Visão de Unidade", unidadeSelecionada, _opcoesUnidade, Icons.church, isEscuro, (val) => setStateModal(() => unidadeSelecionada = val!)),
-                        ),
-                      ],
+                    // DROPDOWN 2: ESCOLHER A ALA (Adapta-se à Estaca escolhida)
+                    DropdownButtonFormField<String>(
+                      value: unidadeSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                      decoration: InputDecoration(labelText: "Unidade Específica", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.church, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                      items: listaAlas.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      onChanged: (val) => setStateModal(() => unidadeSelecionada = val!),
                     ),
                     
                     const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Divider()),
@@ -131,65 +175,48 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                             String usuarioLimpo = usuarioCtrl.text.trim().replaceAll(' ', '').toLowerCase();
                             String emailAuthFantasma = "$usuarioLimpo@sistema.local";
 
-                            if (isEdicao) {
-                              // ATUALIZAR USUÁRIO EXISTENTE
-                              Map<String, dynamic> atualizacoes = {
-                                'nome': nomeCtrl.text.trim(),
-                                'email_contato': emailContatoCtrl.text.trim(),
-                                'whatsapp': whatsappCtrl.text.trim(),
-                                'cargo': cargoSelecionado,
-                                'nivel_acesso': nivelAcessoCalc,
-                                'unidade': unidadeSelecionada,
-                              };
+                            Map<String, dynamic> dadosFinais = {
+                              'nome': nomeCtrl.text.trim(),
+                              'usuario': usuarioLimpo,
+                              'email_contato': emailContatoCtrl.text.trim(),
+                              'whatsapp': whatsappCtrl.text.trim(),
+                              'cargo': cargoSelecionado,
+                              'nivel_acesso': nivelAcessoCalc,
+                              'estaca': estacaSelecionada, // SALVA A ESTACA NO PERFIL
+                              'unidade': unidadeSelecionada, // SALVA A ALA NO PERFIL
+                            };
 
-                              // Se o Admin digitou uma senha nova para esse líder
+                            if (isEdicao) {
                               if (senhaCtrl.text.trim().isNotEmpty) {
-                                if (senhaCtrl.text.trim().length < 6) throw Exception("A senha deve ter no mínimo 6 caracteres.");
-                                
+                                if (senhaCtrl.text.trim().length < 6) throw Exception("Mínimo de 6 caracteres.");
                                 String? senhaAntigaSistema = dados!['senha_sistema'];
                                 String emailDoLider = dados['email'] ?? emailAuthFantasma;
 
                                 if (senhaAntigaSistema != null) {
-                                  // Loga invisivelmente, troca a senha e desloga
                                   FirebaseApp appSecundario = await Firebase.initializeApp(name: 'AppSecundario', options: Firebase.app().options);
                                   try {
-                                    UserCredential credencial = await FirebaseAuth.instanceFor(app: appSecundario)
-                                        .signInWithEmailAndPassword(email: emailDoLider, password: senhaAntigaSistema);
-                                    
+                                    UserCredential credencial = await FirebaseAuth.instanceFor(app: appSecundario).signInWithEmailAndPassword(email: emailDoLider, password: senhaAntigaSistema);
                                     await credencial.user!.updatePassword(senhaCtrl.text.trim());
-                                    atualizacoes['senha_sistema'] = senhaCtrl.text.trim(); // Atualiza a chave secreta
+                                    dadosFinais['senha_sistema'] = senhaCtrl.text.trim();
                                   } finally {
                                     await appSecundario.delete();
                                   }
                                 } else {
-                                  throw Exception("Este usuário foi criado manualmente. Exclua-o e crie novamente para gerenciar a senha por aqui.");
+                                  throw Exception("Usuário criado antes da atualização. Recrie o acesso dele.");
                                 }
                               }
-
-                              await FirebaseFirestore.instance.collection('usuarios').doc(liderAtual!.id).update(atualizacoes);
-
+                              await FirebaseFirestore.instance.collection('usuarios').doc(liderAtual!.id).update(dadosFinais);
                             } else {
-                              // CRIAR NOVO USUÁRIO
                               FirebaseApp appSecundario = await Firebase.initializeApp(name: 'AppSecundario', options: Firebase.app().options);
-
-                              UserCredential credencial = await FirebaseAuth.instanceFor(app: appSecundario)
-                                  .createUserWithEmailAndPassword(email: emailAuthFantasma, password: senhaCtrl.text.trim());
-
+                              UserCredential credencial = await FirebaseAuth.instanceFor(app: appSecundario).createUserWithEmailAndPassword(email: emailAuthFantasma, password: senhaCtrl.text.trim());
                               String novoUid = credencial.user!.uid;
                               await appSecundario.delete();
 
-                              await FirebaseFirestore.instance.collection('usuarios').doc(novoUid).set({
-                                'nome': nomeCtrl.text.trim(),
-                                'usuario': usuarioLimpo,
-                                'email': emailAuthFantasma,
-                                'email_contato': emailContatoCtrl.text.trim(),
-                                'whatsapp': whatsappCtrl.text.trim(),
-                                'senha_sistema': senhaCtrl.text.trim(), // A SENHA SECRETA SALVA AQUI
-                                'cargo': cargoSelecionado,
-                                'nivel_acesso': nivelAcessoCalc,
-                                'unidade': unidadeSelecionada,
-                                'data_criacao': FieldValue.serverTimestamp(),
-                              });
+                              dadosFinais['email'] = emailAuthFantasma;
+                              dadosFinais['senha_sistema'] = senhaCtrl.text.trim();
+                              dadosFinais['data_criacao'] = FieldValue.serverTimestamp();
+                              
+                              await FirebaseFirestore.instance.collection('usuarios').doc(novoUid).set(dadosFinais);
                             }
                             if (context.mounted) Navigator.pop(context);
                           } catch (e) {
@@ -219,15 +246,6 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
     );
   }
 
-  Widget _construirDropdown(String label, String valorAtual, List<String> itens, IconData icon, bool isEscuro, Function(String?) onChanged) {
-    return DropdownButtonFormField<String>(
-      value: valorAtual, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-      decoration: InputDecoration(labelText: label, labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(icon, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-      items: itens.map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis))).toList(),
-      onChanged: onChanged,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
@@ -253,10 +271,9 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
               
               String nome = lider['nome'] ?? 'Sem Nome';
               String cargo = lider['cargo'] ?? 'Desconhecido';
+              String estaca = lider['estaca'] ?? 'Global';
               String unidade = lider['unidade'] ?? 'Desconhecida';
               String usuarioLogin = lider['usuario'] ?? 'Sem Usuário';
-              String emailContato = lider['email_contato'] ?? '';
-              String whatsapp = lider['whatsapp'] ?? '';
               
               bool isConselho = cargo.contains('Conselho');
               bool isEstaca = cargo.contains('Estaca');
@@ -286,33 +303,17 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                 },
                 child: Card(
                   color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
-                  child: ExpansionTile(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     leading: CircleAvatar(backgroundColor: corAvatar.withValues(alpha: 0.15), child: Icon(iconeAvatar, color: corAvatar)),
                     title: Text(nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
-                    subtitle: Text("$cargo • $unidade", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w500)),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [const Icon(Icons.account_circle, size: 16, color: Colors.grey), const SizedBox(width: 8), Text("Login: $usuarioLogin", style: const TextStyle(fontWeight: FontWeight.bold))]),
-                            const SizedBox(height: 8),
-                            if (emailContato.isNotEmpty) Row(children: [const Icon(Icons.email, size: 16, color: Colors.grey), const SizedBox(width: 8), Text(emailContato)]),
-                            const SizedBox(height: 8),
-                            if (whatsapp.isNotEmpty) Row(children: [const Icon(Icons.phone, size: 16, color: Colors.grey), const SizedBox(width: 8), Text(whatsapp)]),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                onPressed: () => _mostrarFormularioLider(liderAtual: doc),
-                                icon: const Icon(Icons.edit, size: 16),
-                                label: const Text("Editar Perfil/Senha"),
-                              ),
-                            )
-                          ],
-                        ),
-                      )
-                    ],
+                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const SizedBox(height: 4), 
+                      Text("$cargo • $unidade", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w500)), 
+                      const SizedBox(height: 4), 
+                      Row(children: [const Icon(Icons.account_circle, size: 14, color: Colors.grey), const SizedBox(width: 4), Text(usuarioLogin, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))])
+                    ]),
+                    trailing: IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: () => _mostrarFormularioLider(liderAtual: doc)),
                   ),
                 ),
               );

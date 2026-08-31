@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../main.dart'; 
 import '../chamados_enviados.dart';
 import '../../services/gerador_pdf.dart';
+import '../login_tela.dart';
 
 class AbaPerfil extends StatefulWidget {
-  final String nivelAcesso; // Recebe o nível de acesso
-
+  final String nivelAcesso; 
   const AbaPerfil({super.key, required this.nivelAcesso});
 
   @override
@@ -25,15 +26,17 @@ class _AbaPerfilState extends State<AbaPerfil> {
     _configurarDadosPerfil();
   }
 
-  // ==========================================
-  // ADAPTAÇÃO DINÂMICA DO PERFIL
-  // ==========================================
   void _configurarDadosPerfil() {
     if (widget.nivelAcesso == 'Estaca') {
       _nomeLider = "Presidente Costa";
       _cargoLider = "Presidente de Estaca";
       _unidadeLider = "Estaca Norte";
       _corPrincipal = Colors.purple;
+    } else if (widget.nivelAcesso == 'Gestor') {
+      _nomeLider = "Gestor Geral";
+      _cargoLider = "Conselho Geral";
+      _unidadeLider = "Global";
+      _corPrincipal = Colors.teal;
     } else if (widget.nivelAcesso == 'Admin') {
       _nomeLider = "Administrador";
       _cargoLider = "Admin Global do Sistema";
@@ -143,7 +146,6 @@ class _AbaPerfilState extends State<AbaPerfil> {
                         {'nome': 'Ana Beatriz', 'idade': 18, 'status': 'Enviado', 'data_envio': '15/07/2026', 'destino': 'Missão Brasil São Paulo Sul'},
                         {'nome': 'Marcos Paulo', 'idade': 20, 'status': 'Enviado', 'data_envio': '12/08/2026', 'destino': 'Aguardando Carta'},
                       ];
-
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando PDF...')));
                       await GeradorPdf.gerarRelatorio(_unidadeLider, jovensParaRelatorio);
                     },
@@ -223,9 +225,21 @@ class _AbaPerfilState extends State<AbaPerfil> {
                         ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                          onPressed: () {
+                          onPressed: () async {
+                            // 1. Fecha o modal de alerta
                             Navigator.pop(context);
-                            Navigator.of(context).popUntil((route) => route.isFirst);
+                            
+                            // 2. Realiza o logoff oficial no Firebase
+                            await FirebaseAuth.instance.signOut();
+                            
+                            // 3. Volta para a Tela de Login limpando o histórico
+                            if (context.mounted) {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (context) => const LoginPage()),
+                                (route) => false,
+                              );
+                            }
                           },
                           child: const Text("Sair"),
                         ),
