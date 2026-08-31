@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'admin/lista_jovens.dart';
 import 'admin/gestao_lideres.dart';
 import './admin/gestao_unidades.dart';
+import 'admin/gestao_etapas.dart'; // NOVA IMPORTAÇÃO AQUI
 
 class AbaAdmin extends StatefulWidget {
   const AbaAdmin({super.key});
@@ -20,7 +21,7 @@ class _AbaAdminState extends State<AbaAdmin> {
     Color cor,
     IconData icone,
     bool isEscuro,
-    Stream<QuerySnapshot> streamBuscador, // Agora recebe a busca exata (com filtros)
+    Stream<QuerySnapshot> streamBuscador, 
   ) {
     return Expanded(
       child: Container(
@@ -39,7 +40,6 @@ class _AbaAdminState extends State<AbaAdmin> {
             ),
           ],
         ),
-        // O StreamBuilder escuta a busca específica
         child: StreamBuilder<QuerySnapshot>(
           stream: streamBuscador,
           builder: (context, snapshot) {
@@ -154,170 +154,64 @@ class _AbaAdminState extends State<AbaAdmin> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ==========================================
-            // 1. ESTATÍSTICAS GLOBAIS (AGORA EM 4 BLOCOS)
-            // ==========================================
-            Text(
-              "Visão Global do Sistema",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade500,
-              ),
-            ),
+            Text("Visão Global do Sistema", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
             
-            // Primeira linha: Líderes e Jovens
             Row(
               children: [
-                _construirCardEstatistica(
-                  "Líderes",
-                  Colors.blue,
-                  Icons.admin_panel_settings,
-                  isEscuro,
-                  FirebaseFirestore.instance.collection('usuarios').snapshots(),
-                ),
+                _construirCardEstatistica("Líderes", Colors.blue, Icons.admin_panel_settings, isEscuro, FirebaseFirestore.instance.collection('usuarios').snapshots()),
                 const SizedBox(width: 10),
-                _construirCardEstatistica(
-                  "Total Jovens",
-                  Colors.green,
-                  Icons.groups,
-                  isEscuro,
-                  FirebaseFirestore.instance.collection('jovens').snapshots(),
-                ),
+                _construirCardEstatistica("Total Jovens", Colors.green, Icons.groups, isEscuro, FirebaseFirestore.instance.collection('jovens').snapshots()),
               ],
             ),
             const SizedBox(height: 10),
             
-            // Segunda linha: Alas/Ramos e Estacas
             Row(
               children: [
-                _construirCardEstatistica(
-                  "Alas / Ramos",
-                  Colors.orange,
-                  Icons.church,
-                  isEscuro,
-                  // Filtra apenas Alas e Ramos
-                  FirebaseFirestore.instance.collection('unidades').where('tipo', whereIn: ['Ala', 'Ramo']).snapshots(),
-                ),
+                _construirCardEstatistica("Alas / Ramos", Colors.orange, Icons.church, isEscuro, FirebaseFirestore.instance.collection('unidades').where('tipo', whereIn: ['Ala', 'Ramo']).snapshots()),
                 const SizedBox(width: 10),
-                _construirCardEstatistica(
-                  "Estacas",
-                  Colors.purple,
-                  Icons.map,
-                  isEscuro,
-                  // Filtra apenas Estacas e similares
-                  FirebaseFirestore.instance.collection('unidades').where('tipo', whereIn: ['Estaca', 'Distrito', 'Missão']).snapshots(),
-                ),
+                _construirCardEstatistica("Estacas", Colors.purple, Icons.map, isEscuro, FirebaseFirestore.instance.collection('unidades').where('tipo', whereIn: ['Estaca', 'Distrito', 'Missão']).snapshots()),
               ],
             ),
             const SizedBox(height: 35),
 
-            // ==========================================
-            // 2. GESTÃO DE ACESSOS (LÍDERES)
-            // ==========================================
-            Text(
-              "Gestão de Acessos",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade500,
-              ),
-            ),
+            Text("Gestão de Acessos", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
-            _construirBotaoAcao(
-              "Gerenciar Líderes",
-              "Criar contas, alterar senhas e remover acessos de bispos e líderes da missão.",
-              Icons.manage_accounts,
-              Colors.blue,
-              isEscuro,
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const GestaoLideresTela(),
-                  ),
-                );
-              },
-            ),
+            _construirBotaoAcao("Gerenciar Líderes", "Criar contas, alterar senhas e remover acessos de bispos e líderes da missão.", Icons.manage_accounts, Colors.blue, isEscuro, () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const GestaoLideresTela()));
+            }),
             const SizedBox(height: 25),
 
-            // ==========================================
-            // 3. ESTRUTURA DA IGREJA
-            // ==========================================
-            Text(
-              "Estrutura da Igreja",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade500,
-              ),
-            ),
+            Text("Estrutura da Igreja", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
-            _construirBotaoAcao(
-              "Gerenciar Alas e Ramos",
-              "Adicionar ou renomear as unidades que aparecerão no aplicativo.",
-              Icons.church,
-              Colors.orange,
-              isEscuro,
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const GestaoUnidadesTela(),
-                  ),
-                );
-              },
-            ),
-            _construirBotaoAcao(
-              "Lista Global de Jovens",
-              "Acessar e pesquisar todos os jovens cadastrados em todas as unidades.",
-              Icons.format_list_bulleted,
-              Colors.green,
-              isEscuro,
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ListaGlobalJovensTela(),
-                  ),
-                );
-              },
-            ),
+            _construirBotaoAcao("Gerenciar Alas e Ramos", "Adicionar ou renomear as unidades que aparecerão no aplicativo.", Icons.church, Colors.orange, isEscuro, () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const GestaoUnidadesTela()));
+            }),
+            _construirBotaoAcao("Lista Global de Jovens", "Acessar e pesquisar todos os jovens cadastrados em todas as unidades.", Icons.format_list_bulleted, Colors.green, isEscuro, () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const ListaGlobalJovensTela()));
+            }),
             const SizedBox(height: 25),
 
-            // ==========================================
-            // 4. CONFIGURAÇÕES DO SISTEMA
-            // ==========================================
-            Text(
-              "Sistema",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade500,
-              ),
-            ),
+            Text("Sistema", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
+            
+            // NOVO BOTÃO: CHECKLIST DINÂMICO
             _construirBotaoAcao(
-              "Exportar Banco de Dados",
-              "Baixar uma cópia completa de segurança (Backup) de todas as informações.",
-              Icons.cloud_download,
-              Colors.purple,
+              "Checklist Dinâmico",
+              "Personalizar as etapas, adicionar ou remover tarefas para os missionários.",
+              Icons.checklist,
+              Colors.indigo,
               isEscuro,
-              () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Iniciando Backup...')),
-              ),
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const GestaoEtapasTela()),
+                );
+              },
             ),
-            _construirBotaoAcao(
-              "Limpar Registros Antigos",
-              "Excluir jovens que já viajaram para a missão há mais de 1 ano.",
-              Icons.delete_sweep,
-              Colors.redAccent,
-              isEscuro,
-              () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Acesso Restrito!'))
-              ),
-            ),
+            
+            _construirBotaoAcao("Exportar Banco de Dados", "Baixar uma cópia completa de segurança (Backup) de todas as informações.", Icons.cloud_download, Colors.purple, isEscuro, () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Iniciando Backup...')))),
+            _construirBotaoAcao("Limpar Registros Antigos", "Excluir jovens que já viajaram para a missão há mais de 1 ano.", Icons.delete_sweep, Colors.redAccent, isEscuro, () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Acesso Restrito!')))),
             const SizedBox(height: 40),
           ],
         ),

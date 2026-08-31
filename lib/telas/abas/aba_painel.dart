@@ -1,5 +1,4 @@
-// ignore_for_file: empty_catches, curly_braces_in_flow_control_structures, deprecated_member_use, unnecessary_cast
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -19,27 +18,45 @@ class _AbaPainelState extends State<AbaPainel> {
   String _minhaUnidade = "";
   bool _carregandoPerfil = true;
 
-  final List<String> _nomesEtapasRapazes = ["Aceitou o Desafio (Entrevistado)", "Ensino Médio Concluído", "Alistamento Militar", "Possui Mentor", "Metas com o Bispo", "Exame Médico", "Exame Odontológico", "Chamado Aberto no Sistema"];
-  final List<String> _nomesEtapasMocas = ["Aceitou o Desafio (Entrevistado)", "Ensino Médio Concluído", "Possui Mentor", "Metas com o Bispo", "Exame Médico", "Exame Odontológico", "Chamado Aberto no Sistema"];
+  // AGORA ELAS COMEÇAM VAZIAS E SÃO PREENCHIDAS PELO BANCO DE DADOS
+  List<String> _nomesEtapasRapazes = ["Carregando..."];
+  List<String> _nomesEtapasMocas = ["Carregando..."];
+  StreamSubscription? _etapasSub;
 
   @override
   void initState() {
     super.initState();
     _carregarPerfilLider(); 
+    _ouvirEtapasDoBanco();
+  }
+
+  @override
+  void dispose() {
+    _etapasSub?.cancel();
+    super.dispose();
   }
 
   // ==========================================
-  // CARREGAMENTO SEGURO (À PROVA DE FALHAS)
+  // OUVINTE DO CHECKLIST DINÂMICO
   // ==========================================
+  void _ouvirEtapasDoBanco() {
+    _etapasSub = FirebaseFirestore.instance.collection('sistema').doc('etapas').snapshots().listen((doc) {
+      if (doc.exists && mounted) {
+        setState(() {
+          _nomesEtapasRapazes = List<String>.from(doc['rapazes'] ?? []);
+          _nomesEtapasMocas = List<String>.from(doc['mocas'] ?? []);
+        });
+      }
+    });
+  }
+
   Future<void> _carregarPerfilLider() async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         var doc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
         if (doc.exists && mounted) {
-          // Usa um Map para evitar travamentos caso falte algum campo no Firebase
           var dados = doc.data() as Map<String, dynamic>? ?? {};
-          
           setState(() {
             _minhaEstaca = dados['estaca'] ?? "Global (Todas)";
             _minhaUnidade = dados['unidade'] ?? "Global (Todas)";
@@ -52,8 +69,6 @@ class _AbaPainelState extends State<AbaPainel> {
         if (mounted) setState(() => _carregandoPerfil = false);
       }
     } catch (e) {
-      debugPrint("Erro na leitura do perfil: $e");
-      // Se der erro, desliga o carregamento de qualquer jeito para não travar a tela
       if (mounted) setState(() => _carregandoPerfil = false);
     }
   }
@@ -62,6 +77,7 @@ class _AbaPainelState extends State<AbaPainel> {
     if (etapas.isEmpty) return 0.0;
     int concluidas = etapas.where((etapa) => etapa == true).length;
     int total = sexo == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
+    if (total == 0) return 0.0; // Evita erro se a lista do banco vier vazia
     return concluidas / total;
   }
 
@@ -70,14 +86,17 @@ class _AbaPainelState extends State<AbaPainel> {
     int concluidas = etapas.where((e) => e == true).length;
     List<String> listaEtapas = sexo == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
     
-    if (concluidas == listaEtapas.length) return {'texto': 'Pronto para Envio!', 'cor': Colors.green, 'icone': Icons.check_circle};
+    if (concluidas >= listaEtapas.length) return {'texto': 'Pronto para Envio!', 'cor': Colors.green, 'icone': Icons.check_circle};
     
     int indexPendente = etapas.indexOf(false);
-    if(indexPendente == -1) return {'texto': 'Completo', 'cor': Colors.green, 'icone': Icons.check_circle};
+    if(indexPendente == -1 || indexPendente >= listaEtapas.length) return {'texto': 'Completo', 'cor': Colors.green, 'icone': Icons.check_circle};
     
     String nomePendente = listaEtapas[indexPendente];
     Color cor;
-    if (concluidas <= 2) { cor = Colors.blue; } else if (concluidas <= 5) { cor = Colors.orange; } else { cor = Colors.purple; }
+    if (concluidas <= (listaEtapas.length / 3)) { cor = Colors.blue; } 
+    else if (concluidas <= (listaEtapas.length / 1.5)) { cor = Colors.orange; } 
+    else { cor = Colors.purple; }
+    
     return {'texto': 'Pendente: $nomePendente', 'cor': cor, 'icone': Icons.pending_actions};
   }
 
@@ -105,7 +124,6 @@ class _AbaPainelState extends State<AbaPainel> {
   void _mostrarFormularioJovem({Map<String, dynamic>? jovemAtual}) {
     bool isEdicao = jovemAtual != null;
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
-    
     bool isAdmin = _minhaUnidade == 'Global (Todas)'; 
     
     final nomeCtrl = TextEditingController(text: isEdicao ? jovemAtual['nome'] : "");
@@ -113,9 +131,7 @@ class _AbaPainelState extends State<AbaPainel> {
     final telefoneCtrl = TextEditingController(text: isEdicao ? jovemAtual['telefone'] : "");
     final estacaCtrl = TextEditingController(text: isEdicao ? (jovemAtual['estaca'] ?? "") : "");
     final unidadeCtrl = TextEditingController(text: isEdicao ? (jovemAtual['unidade'] ?? "") : "");
-    
     String sexoSelecionado = isEdicao ? (jovemAtual['sexo'] ?? "Masculino") : "Masculino";
-
     bool salvando = false;
 
     showModalBottomSheet(
@@ -140,16 +156,11 @@ class _AbaPainelState extends State<AbaPainel> {
                     ],
                   ),
                   const SizedBox(height: 25),
-                  
-                  TextField(
-                    controller: nomeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                    decoration: InputDecoration(labelText: "Nome do Jovem", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.person, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                  ),
+                  TextField(controller: nomeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Nome do Jovem", prefixIcon: const Icon(Icons.person), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
                   const SizedBox(height: 15),
-                  
                   Row(
                     children: [
-                      Expanded(flex: 2, child: TextField(controller: idadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.number, decoration: InputDecoration(labelText: "Idade", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.cake, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+                      Expanded(flex: 2, child: TextField(controller: idadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.number, decoration: InputDecoration(labelText: "Idade", prefixIcon: const Icon(Icons.cake), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
                       const SizedBox(width: 15),
                       Expanded(flex: 3, child: DropdownButtonFormField<String>(
                         value: sexoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
@@ -161,8 +172,7 @@ class _AbaPainelState extends State<AbaPainel> {
                     ],
                   ),
                   const SizedBox(height: 15),
-                  
-                  TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.phone, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+                  TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp", prefixIcon: const Icon(Icons.phone), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
                   const SizedBox(height: 15),
 
                   if (isAdmin)
@@ -170,15 +180,13 @@ class _AbaPainelState extends State<AbaPainel> {
                       padding: const EdgeInsets.only(bottom: 15),
                       child: Row(
                         children: [
-                          Expanded(child: TextField(controller: estacaCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Estaca", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.map, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+                          Expanded(child: TextField(controller: estacaCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Estaca", prefixIcon: const Icon(Icons.map), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
                           const SizedBox(width: 10),
-                          Expanded(child: TextField(controller: unidadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Ala/Ramo", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.church, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+                          Expanded(child: TextField(controller: unidadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Ala/Ramo", prefixIcon: const Icon(Icons.church), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
                         ],
                       ),
                     ),
-                  
                   const SizedBox(height: 20),
-                  
                   SizedBox(
                     width: double.infinity, height: 50,
                     child: ElevatedButton.icon(
@@ -189,14 +197,31 @@ class _AbaPainelState extends State<AbaPainel> {
 
                         try {
                           int totalEtapas = sexoSelecionado == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
-                          
+                          String estacaFinal = isAdmin ? estacaCtrl.text.trim() : _minhaEstaca;
+                          if (estacaFinal.isEmpty) estacaFinal = 'Sem Estaca';
+                          String unidadeFinal = isAdmin ? unidadeCtrl.text.trim() : _minhaUnidade;
+                          if (unidadeFinal.isEmpty) unidadeFinal = 'Sem Ala';
+
+                          String bispoUidEncontrado = "";
+                          var queryLideres = await FirebaseFirestore.instance.collection('usuarios')
+                              .where('estaca', isEqualTo: estacaFinal).where('unidade', isEqualTo: unidadeFinal).get();
+                              
+                          if (queryLideres.docs.isNotEmpty) {
+                            for (var doc in queryLideres.docs) {
+                              String cargo = doc['cargo'] ?? '';
+                              if (cargo == 'Bispo' || cargo == 'Pres. de Ramo') { bispoUidEncontrado = doc.id; break; }
+                            }
+                            if (bispoUidEncontrado.isEmpty) bispoUidEncontrado = queryLideres.docs.first.id;
+                          }
+
                           Map<String, dynamic> dados = {
                             'nome': nomeCtrl.text.trim(),
                             'idade': int.tryParse(idadeCtrl.text) ?? 0,
                             'sexo': sexoSelecionado,
                             'telefone': telefoneCtrl.text.trim(),
-                            'estaca': isAdmin ? estacaCtrl.text.trim() : _minhaEstaca,
-                            'unidade': isAdmin ? unidadeCtrl.text.trim() : _minhaUnidade,
+                            'estaca': estacaFinal,
+                            'unidade': unidadeFinal,
+                            'bispo_uid': bispoUidEncontrado,
                           };
 
                           if (isEdicao) {
@@ -236,7 +261,11 @@ class _AbaPainelState extends State<AbaPainel> {
     List<bool> etapasTemp = List<bool>.from(jovem['etapas'] ?? []); 
     List<String> listaEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
     
+    // MÁGICA: Se o Admin aumentou o checklist dinâmico, adicionamos itens 'false' automaticamente à ficha do jovem
     while(etapasTemp.length < listaEtapas.length) { etapasTemp.add(false); }
+    
+    // Se o Admin removeu itens do checklist dinâmico, ajustamos a ficha cortando o excesso
+    if (etapasTemp.length > listaEtapas.length) { etapasTemp = etapasTemp.sublist(0, listaEtapas.length); }
     
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     TextEditingController notaCtrl = TextEditingController();
@@ -392,7 +421,7 @@ class _AbaPainelState extends State<AbaPainel> {
     String numeroLimpo = telefone.replaceAll(RegExp(r'[^0-9]'), '');
     if (numeroLimpo.isEmpty) return;
     int indexPendente = etapas.indexOf(false);
-    String nomeEtapaPendente = indexPendente != -1 ? listaEtapas[indexPendente] : "Enviou tudo";
+    String nomeEtapaPendente = indexPendente != -1 && indexPendente < listaEtapas.length ? listaEtapas[indexPendente] : "Enviou tudo";
     String mensagem = "Olá, $nome! Tudo bem? Vi aqui que a sua próxima etapa é: *$nomeEtapaPendente*. Precisa de alguma ajuda com isso?";
     final Uri url = Uri.parse('https://wa.me/$numeroLimpo?text=${Uri.encodeComponent(mensagem)}');
     try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch (e) {}
@@ -458,14 +487,27 @@ class _AbaPainelState extends State<AbaPainel> {
             return etapasJovem[indexFiltro] == false;
           }).toList();
 
+          // Combina todas as etapas ativas do banco para montar a barra de filtros
+          List<String> todosFiltrosPossiveis = ['Todos'];
+          todosFiltrosPossiveis.addAll(_nomesEtapasRapazes.toSet().union(_nomesEtapasMocas.toSet()).toList());
+
           return SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(padding: const EdgeInsets.all(16.0), child: Row(children: [_construirCartaoDashboard("Perspectiva", jovensPerspectiva.length.toString(), Colors.orange, Icons.radar, isEscuro), const SizedBox(width: 10), _construirCartaoDashboard("Preparação", jovensPreparacao.length.toString(), Colors.blue, Icons.assignment_ind, isEscuro), const SizedBox(width: 10), _construirCartaoDashboard("Enviados", jovensEnviados.length.toString(), Colors.green, Icons.check_circle, isEscuro)])),
-                SizedBox(height: 40, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), children: ['Todos', 'Exame Médico', 'Exame Odontológico', 'Alistamento Militar'].map((f) => _construirFiltro(f, isEscuro)).toList())),
-                const SizedBox(height: 20),
                 
+                // MÁGICA 2: Filtros Inteligentes Dinâmicos baseados no Banco
+                SizedBox(
+                  height: 40, 
+                  child: ListView(
+                    scrollDirection: Axis.horizontal, 
+                    padding: const EdgeInsets.symmetric(horizontal: 16), 
+                    children: todosFiltrosPossiveis.map((f) => _construirFiltro(f, isEscuro)).toList()
+                  )
+                ),
+                
+                const SizedBox(height: 20),
                 Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Processo Iniciado", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTexto))),
                 const SizedBox(height: 10),
                 if (listaFiltrada.isEmpty) Padding(padding: const EdgeInsets.all(16.0), child: Text(_filtroAtual == 'Todos' ? "Nenhum jovem em preparação." : "Nenhum jovem pendente.", style: const TextStyle(color: Colors.grey)))

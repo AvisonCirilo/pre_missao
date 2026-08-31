@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class AbaDashboardGestor extends StatefulWidget {
   const AbaDashboardGestor({super.key});
@@ -9,63 +10,8 @@ class AbaDashboardGestor extends StatefulWidget {
 }
 
 class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
-  final Map<String, List<String>> _unidadesPorEstaca = {
-    'Estaca Norte': ['Ala Centro', 'Ala Sul', 'Ala Norte'],
-    'Distrito Sul': ['Ramo Leste', 'Ramo Oeste'],
-    'Estaca Leste': ['Ala Primavera', 'Ala Esperança'],
-  };
-
-  // Banco de Dados global simulado
-  final List<Map<String, dynamic>> _todosJovens = [
-    {'id': '1', 'nome': 'João Silva', 'idade': 19, 'sexo': 'Masculino', 'estaca': 'Estaca Norte', 'unidade': 'Ala Centro', 'status': 'Preparação', 'telefone': '5591900000000', 'etapas': <bool>[true, true, true, false, false, false, false, false], 'ultima_atualizacao': DateTime.now().subtract(const Duration(days: 40)), 'anotacoes': []},
-    {'id': '2', 'nome': 'Ana Beatriz', 'idade': 18, 'sexo': 'Feminino', 'estaca': 'Estaca Norte', 'unidade': 'Ala Sul', 'status': 'Preparação', 'telefone': '5591900000000', 'etapas': <bool>[true, true, false, false, false, false, false], 'ultima_atualizacao': DateTime.now().subtract(const Duration(days: 5)), 'anotacoes': []},
-    {'id': '4', 'nome': 'Marcos Paulo', 'idade': 20, 'sexo': 'Masculino', 'estaca': 'Distrito Sul', 'unidade': 'Ramo Leste', 'status': 'Enviado', 'telefone': '5591900000000', 'etapas': <bool>[true, true, true, true, true, true, true, true], 'ultima_atualizacao': DateTime.now(), 'anotacoes': []},
-  ];
-
-  final List<String> _nomesEtapasRapazes = ["Aceitou o Desafio", "Ensino Médio", "Alistamento Militar", "Possui Mentor", "Metas com Bispo", "Exame Médico", "Exame Odonto", "Chamado Aberto"];
-  final List<String> _nomesEtapasMocas = ["Aceitou o Desafio", "Ensino Médio", "Possui Mentor", "Metas com Bispo", "Exame Médico", "Exame Odonto", "Chamado Aberto"];
-
-  String _termoBusca = '';
-
-  Map<String, dynamic> _obterEstiloStatus(String status) {
-    switch (status) {
-      case 'Perspectiva': return {'cor': Colors.orange, 'icone': Icons.radar};
-      case 'Preparação': return {'cor': Colors.blue, 'icone': Icons.assignment_ind};
-      case 'Enviado': return {'cor': Colors.green, 'icone': Icons.check_circle};
-      default: return {'cor': Colors.grey, 'icone': Icons.help};
-    }
-  }
-
-  double _calcularProgresso(List<dynamic> etapas, String sexo) {
-    if (etapas.isEmpty) return 0.0;
-    int concluidas = etapas.where((etapa) => etapa == true).length;
-    int total = sexo == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
-    return concluidas / total;
-  }
-
-  // ==========================================
-  // FUNÇÃO QUE ESTAVA FALTANDO ADICIONADA AQUI
-  // ==========================================
-  Widget _construirAlertaEstagnacao(DateTime? ultimaAtualizacao) {
-    if (ultimaAtualizacao == null) return const SizedBox.shrink();
-    int dias = DateTime.now().difference(ultimaAtualizacao).inDays;
-    if (dias > 30) {
-      return Container(
-        margin: const EdgeInsets.only(top: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.red.withValues(alpha: 0.5))),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.warning_amber_rounded, size: 10, color: Colors.red),
-            const SizedBox(width: 4),
-            Text("Estagnado: $dias dias", style: const TextStyle(fontSize: 9, color: Colors.red, fontWeight: FontWeight.bold)),
-          ],
-        ),
-      );
-    }
-    return const SizedBox.shrink();
-  }
+  int _indiceTocadoStatus = -1;
+  int _indiceTocadoGenero = -1;
 
   Widget _construirCartaoDashboard(String titulo, String valor, Color cor, IconData icone, bool isEscuro) {
     return Expanded(
@@ -84,273 +30,53 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
     );
   }
 
-  void _mostrarFormularioJovem({Map<String, dynamic>? jovemAtual}) {
-    bool isEdicao = jovemAtual != null;
-    bool isEscuro = Theme.of(context).brightness == Brightness.dark;
-    
-    final nomeCtrl = TextEditingController(text: isEdicao ? jovemAtual['nome'] : "");
-    final idadeCtrl = TextEditingController(text: isEdicao ? jovemAtual['idade'].toString() : "");
-    final telefoneCtrl = TextEditingController(text: isEdicao ? jovemAtual['telefone'] : ""); 
-    String sexoSelecionado = isEdicao ? jovemAtual['sexo'] : "Masculino";
-    
-    String estacaSelecionada = isEdicao ? (jovemAtual['estaca'] ?? _unidadesPorEstaca.keys.first) : _unidadesPorEstaca.keys.first;
-    List<String> listaAlas = _unidadesPorEstaca[estacaSelecionada] ?? [];
-    
-    String unidadeSelecionada = isEdicao ? jovemAtual['unidade'] : (listaAlas.isNotEmpty ? listaAlas.first : "");
-    if (!listaAlas.contains(unidadeSelecionada) && listaAlas.isNotEmpty) {
-      unidadeSelecionada = listaAlas.first;
-    }
-
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (context) {
-        return StatefulBuilder(builder: (context, setStateModal) {
-          return Container(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
-            decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(width: 40, height: 4, decoration: BoxDecoration(color: isEscuro ? Colors.white24 : Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(isEdicao ? Icons.edit : Icons.person_add, color: Colors.teal),
-                    const SizedBox(width: 10),
-                    Text(isEdicao ? "Editar Jovem (Global)" : "Novo Jovem", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
-                  ],
-                ),
-                const SizedBox(height: 25),
-
-                DropdownButtonFormField<String>(
-                  initialValue: estacaSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
-                  style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                  decoration: InputDecoration(labelText: "Estaca / Distrito", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.map, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                  items: _unidadesPorEstaca.keys.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (val) {
-                    setStateModal(() {
-                      estacaSelecionada = val!;
-                      listaAlas = _unidadesPorEstaca[estacaSelecionada]!;
-                      unidadeSelecionada = listaAlas.first;
-                    });
-                  },
-                ),
-                const SizedBox(height: 15),
-
-                DropdownButtonFormField<String>(
-                  initialValue: unidadeSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
-                  style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                  decoration: InputDecoration(labelText: "Ala / Ramo", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.church, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                  items: listaAlas.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (val) => setStateModal(() => unidadeSelecionada = val!),
-                ),
-                const SizedBox(height: 15),
-
-                TextField(
-                  controller: nomeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                  decoration: InputDecoration(labelText: "Nome do Jovem", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.person, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(flex: 2, child: TextField(controller: idadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.number, decoration: InputDecoration(labelText: "Idade", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.cake, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
-                    const SizedBox(width: 15),
-                    Expanded(flex: 3, child: DropdownButtonFormField<String>(
-                      initialValue: sexoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
-                      style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                      decoration: InputDecoration(filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                      items: ["Masculino", "Feminino"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: (val) => setStateModal(() => sexoSelecionado = val!),
-                    )),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.phone, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity, height: 50,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    onPressed: () {
-                      if (nomeCtrl.text.trim().isEmpty) return;
-                      setState(() {
-                        if (isEdicao) {
-                          jovemAtual['nome'] = nomeCtrl.text.trim();
-                          jovemAtual['idade'] = int.tryParse(idadeCtrl.text) ?? 0;
-                          jovemAtual['telefone'] = telefoneCtrl.text.trim();
-                          jovemAtual['estaca'] = estacaSelecionada;
-                          jovemAtual['unidade'] = unidadeSelecionada;
-                          if (jovemAtual['sexo'] != sexoSelecionado) {
-                            jovemAtual['sexo'] = sexoSelecionado;
-                            int totalEtapas = sexoSelecionado == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
-                            jovemAtual['etapas'] = List.generate(totalEtapas, (index) => false);
-                            jovemAtual['status'] = 'Perspectiva';
-                          }
-                        } else {
-                          int totalEtapas = sexoSelecionado == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
-                          _todosJovens.add({'id': DateTime.now().millisecondsSinceEpoch.toString(), 'nome': nomeCtrl.text.trim(), 'idade': int.tryParse(idadeCtrl.text) ?? 0, 'sexo': sexoSelecionado, 'estaca': estacaSelecionada, 'unidade': unidadeSelecionada, 'status': 'Perspectiva', 'telefone': telefoneCtrl.text.trim(), 'etapas': List.generate(totalEtapas, (index) => false), 'ultima_atualizacao': DateTime.now(), 'anotacoes': []});
-                        }
-                      });
-                      Navigator.pop(context); 
-                    },
-                    icon: const Icon(Icons.save),
-                    label: Text(isEdicao ? "Salvar" : "Criar Jovem", style: const TextStyle(fontWeight: FontWeight.bold)),
+  Widget _construirGraficoPizza(String titulo, List<PieChartSectionData> secoes, List<Widget> legendas, bool isEscuro) {
+    return Expanded(
+      child: Container(
+        height: 220,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+        child: Column(
+          children: [
+            Text(titulo, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isEscuro ? Colors.white : Colors.black87)),
+            const SizedBox(height: 10),
+            Expanded(
+              child: secoes.isEmpty 
+                ? const Center(child: Text("Sem dados", style: TextStyle(color: Colors.grey)))
+                : PieChart(
+                    PieChartData(
+                      sectionsSpace: 2, centerSpaceRadius: 25, sections: secoes,
+                      pieTouchData: PieTouchData(
+                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                          setState(() {
+                            if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                              if (titulo.contains("Status")) _indiceTocadoStatus = -1;
+                              if (titulo.contains("Gênero")) _indiceTocadoGenero = -1;
+                              return;
+                            }
+                            if (titulo.contains("Status")) _indiceTocadoStatus = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                            if (titulo.contains("Gênero")) _indiceTocadoGenero = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                          });
+                        },
+                      ),
+                    ),
                   ),
-                ),
-              ],
             ),
-          );
-        });
-      },
+            const SizedBox(height: 10),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: legendas),
+          ],
+        ),
+      ),
     );
   }
 
-  void _abrirDetalhesJovem(Map<String, dynamic> jovem) {
-    bool isEscuro = Theme.of(context).brightness == Brightness.dark;
-    List<bool> etapasTemp = List<bool>.from(jovem['etapas']); 
-    List<String> listaEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
-    final estilo = _obterEstiloStatus(jovem['status']);
-    TextEditingController notaCtrl = TextEditingController();
-
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (context) {
-        return StatefulBuilder(builder: (context, setStateModal) {
-          double progressoModal = _calcularProgresso(etapasTemp, jovem['sexo']);
-          List<dynamic> notas = jovem['anotacoes'] ?? [];
-
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.9,
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 16, left: 24, right: 24, top: 16),
-            decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: isEscuro ? Colors.white24 : Colors.grey.shade400, borderRadius: BorderRadius.circular(10)))),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    CircleAvatar(radius: 25, backgroundColor: estilo['cor'].withValues(alpha: 0.15), child: Icon(estilo['icone'], color: estilo['cor'])),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(jovem['nome'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black), overflow: TextOverflow.ellipsis),
-                          Text("${jovem['estaca']} • ${jovem['unidade']} • ${jovem['idade']} anos", style: const TextStyle(color: Colors.grey)),
-                        ],
-                      ),
-                    ),
-                    IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: () { Navigator.pop(context); _mostrarFormularioJovem(jovemAtual: jovem); }),
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(height: 45, width: 45, child: CircularProgressIndicator(value: progressoModal, backgroundColor: isEscuro ? Colors.white12 : Colors.grey.shade200, color: estilo['cor'], strokeWidth: 4)),
-                        Text("${(progressoModal * 100).toInt()}%", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isEscuro ? Colors.white : Colors.black)),
-                      ],
-                    )
-                  ],
-                ),
-                const SizedBox(height: 15),
-                Expanded(
-                  child: DefaultTabController(
-                    length: 2,
-                    child: Column(
-                      children: [
-                        const TabBar(
-                          labelColor: Colors.teal, unselectedLabelColor: Colors.grey, indicatorColor: Colors.teal,
-                          tabs: [Tab(text: "Checklist"), Tab(text: "Anotações")],
-                        ),
-                        Expanded(
-                          child: TabBarView(
-                            children: [
-                              ListView.builder(
-                                padding: const EdgeInsets.only(top: 10), itemCount: listaEtapas.length,
-                                itemBuilder: (context, index) {
-                                  return CheckboxListTile(
-                                    title: Text(listaEtapas[index], style: TextStyle(fontWeight: etapasTemp[index] ? FontWeight.normal : FontWeight.bold, decoration: etapasTemp[index] ? TextDecoration.lineThrough : null, color: etapasTemp[index] ? Colors.grey : (isEscuro ? Colors.white : Colors.black87))),
-                                    value: etapasTemp[index], activeColor: Colors.teal, checkColor: Colors.white, side: BorderSide(color: isEscuro ? Colors.grey.shade400 : Colors.grey.shade700),
-                                    onChanged: (bool? valor) => setStateModal(() => etapasTemp[index] = valor ?? false),
-                                  );
-                                },
-                              ),
-                              Column(
-                                children: [
-                                  Expanded(
-                                    child: notas.isEmpty 
-                                      ? const Center(child: Text("Nenhuma anotação ainda.", style: TextStyle(color: Colors.grey)))
-                                      : ListView.builder(
-                                          padding: const EdgeInsets.only(top: 10), itemCount: notas.length,
-                                          itemBuilder: (context, index) {
-                                            var nota = notas[notas.length - 1 - index];
-                                            return Card(
-                                              color: isEscuro ? Colors.black26 : Colors.grey.shade50, elevation: 0, margin: const EdgeInsets.only(bottom: 8),
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(12.0),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(nota['autor'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal.shade300)), Text(nota['data'], style: const TextStyle(fontSize: 10, color: Colors.grey))]),
-                                                    const SizedBox(height: 4),
-                                                    Text(nota['texto'], style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontSize: 14)),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                  ),
-                                  Row(
-                                    children: [
-                                      Expanded(child: TextField(controller: notaCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(hintText: "Deixar uma nota...", hintStyle: const TextStyle(color: Colors.grey), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none)))),
-                                      const SizedBox(width: 8),
-                                      CircleAvatar(backgroundColor: Colors.teal, child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 18), onPressed: () {
-                                        if(notaCtrl.text.trim().isEmpty) return;
-                                        setStateModal(() {
-                                          notas.add({'data': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}", 'autor': 'Gestor Geral', 'texto': notaCtrl.text.trim()});
-                                          notaCtrl.clear();
-                                        });
-                                      }))
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(child: OutlinedButton.icon(onPressed: jovem['telefone'].toString().isEmpty ? null : () async {
-                      String numero = jovem['telefone'].replaceAll(RegExp(r'[^0-9]'), '');
-                      final Uri url = Uri.parse('https://wa.me/$numero?text=${Uri.encodeComponent("Olá, ${jovem['nome']}! Sou da liderança geral e estou acompanhando seu processo.")}');
-                      // ignore: empty_catches
-                      try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch(e){}
-                    }, icon: const Icon(Icons.chat, color: Colors.green), label: const Text("WhatsApp", style: TextStyle(color: Colors.green)), style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.green), padding: const EdgeInsets.symmetric(vertical: 14)))),
-                    const SizedBox(width: 10),
-                    Expanded(child: ElevatedButton.icon(onPressed: () {
-                      setState(() {
-                        jovem['etapas'] = List<bool>.from(etapasTemp);
-                        jovem['anotacoes'] = notas;
-                        jovem['ultima_atualizacao'] = DateTime.now();
-                        double progFinal = _calcularProgresso(jovem['etapas'], jovem['sexo']);
-                        if (progFinal == 1.0) { jovem['status'] = 'Enviado'; } 
-                        else if (progFinal > 0.0) { jovem['status'] = 'Preparação'; }
-                      });
-                      Navigator.pop(context);
-                    }, icon: const Icon(Icons.save), label: const Text("Salvar"), style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)))),
-                  ],
-                )
-              ],
-            ),
-          );
-        });
-      }
+  Widget _indicadorLegenda(Color cor, String texto, bool isEscuro) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: cor)),
+        const SizedBox(width: 4),
+        Text(texto, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white70 : Colors.black54)),
+      ],
     );
   }
 
@@ -360,117 +86,109 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
     Color corFundo = isEscuro ? const Color(0xFF1E1E1E) : Colors.white;
     Color corTexto = isEscuro ? Colors.white : Colors.black87;
 
-    List<Map<String, dynamic>> jovensFiltrados = _todosJovens.where((jovem) => jovem['nome'].toLowerCase().contains(_termoBusca.toLowerCase())).toList();
-
-    int totalPerspectiva = _todosJovens.where((j) => j['status'] == 'Perspectiva').length;
-    int totalPreparacao = _todosJovens.where((j) => j['status'] == 'Preparação').length;
-    int totalEnviados = _todosJovens.where((j) => j['status'] == 'Enviado').length;
-
-    // Árvore em Cascata Dupla: Estaca > Ala > Jovens
-    Map<String, Map<String, List<Map<String, dynamic>>>> arvoreGlobal = {};
-    for (var jovem in jovensFiltrados) {
-      String estaca = jovem['estaca'] ?? 'Outras';
-      String unidade = jovem['unidade'] ?? 'Geral';
-      arvoreGlobal.putIfAbsent(estaca, () => {});
-      arvoreGlobal[estaca]!.putIfAbsent(unidade, () => []).add(jovem);
-    }
-    List<String> estacasOrdenadas = arvoreGlobal.keys.toList()..sort();
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(automaticallyImplyLeading: false, title: Text('Painel do Gestor Geral', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), backgroundColor: corFundo, elevation: 1),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _mostrarFormularioJovem(),
-        backgroundColor: Colors.teal, foregroundColor: Colors.white,
-        icon: const Icon(Icons.person_add), label: const Text("Criar Jovem", style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
-      body: Column(
-        children: [
-          Padding(
+      appBar: AppBar(automaticallyImplyLeading: false, title: Text('Painel Analítico', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), backgroundColor: corFundo, elevation: 1),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('jovens').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.teal));
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Sistema vazio.", style: TextStyle(color: Colors.grey)));
+
+          List<Map<String, dynamic>> todosJovens = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+
+          int totalPerspectiva = todosJovens.where((j) => j['status'] == 'Perspectiva').length;
+          int totalPreparacao = todosJovens.where((j) => j['status'] == 'Preparação').length;
+          int totalEnviados = todosJovens.where((j) => j['status'] == 'Enviado').length;
+
+          // Calcula Jovens Parados (> 30 dias sem atualização)
+          int totalParados = todosJovens.where((j) {
+            if (j['status'] == 'Enviado' || j['ultima_atualizacao'] == null) return false;
+            int dias = DateTime.now().difference((j['ultima_atualizacao'] as Timestamp).toDate()).inDays;
+            return dias > 30;
+          }).length;
+
+          int totalRapazes = todosJovens.where((j) => j['sexo'] == 'Masculino').length;
+          int totalMocas = todosJovens.where((j) => j['sexo'] == 'Feminino').length;
+
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro),
-                const SizedBox(width: 10),
-                _construirCartaoDashboard("Abertos", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro),
-                const SizedBox(width: 10),
-                _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.check_circle, isEscuro),
+                Row(
+                  children: [
+                    _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro),
+                    const SizedBox(width: 10),
+                    _construirCartaoDashboard("Preparação", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.flight_takeoff, isEscuro),
+                    const SizedBox(width: 10),
+                    _construirCartaoDashboard("Estagnados", totalParados.toString(), Colors.redAccent, Icons.warning_amber_rounded, isEscuro),
+                  ],
+                ),
+                const SizedBox(height: 25),
+                Text("Proporção Geral", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _construirGraficoPizza(
+                      "Status do Processo", 
+                      [
+                        if (totalPerspectiva > 0) PieChartSectionData(value: totalPerspectiva.toDouble(), color: Colors.orange, title: '$totalPerspectiva', radius: _indiceTocadoStatus == 0 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        if (totalPreparacao > 0) PieChartSectionData(value: totalPreparacao.toDouble(), color: Colors.blue, title: '$totalPreparacao', radius: _indiceTocadoStatus == 1 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        if (totalEnviados > 0) PieChartSectionData(value: totalEnviados.toDouble(), color: Colors.green, title: '$totalEnviados', radius: _indiceTocadoStatus == 2 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ], 
+                      [
+                        _indicadorLegenda(Colors.orange, "Persp.", isEscuro),
+                        _indicadorLegenda(Colors.blue, "Prep.", isEscuro),
+                        _indicadorLegenda(Colors.green, "Env.", isEscuro),
+                      ],
+                      isEscuro
+                    ),
+                    const SizedBox(width: 10),
+                    _construirGraficoPizza(
+                      "Gênero", 
+                      [
+                        if (totalRapazes > 0) PieChartSectionData(value: totalRapazes.toDouble(), color: Colors.blue.shade700, title: '$totalRapazes', radius: _indiceTocadoGenero == 0 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        if (totalMocas > 0) PieChartSectionData(value: totalMocas.toDouble(), color: Colors.pink.shade400, title: '$totalMocas', radius: _indiceTocadoGenero == 1 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ], 
+                      [
+                        _indicadorLegenda(Colors.blue.shade700, "Rapazes", isEscuro),
+                        _indicadorLegenda(Colors.pink.shade400, "Moças", isEscuro),
+                      ],
+                      isEscuro
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 25),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: corFundo, borderRadius: BorderRadius.circular(16), border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.lightbulb_outline, color: Colors.teal, size: 20), const SizedBox(width: 8),
+                          Text("Ação Recomendada", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text("Existem $totalParados jovens há mais de 30 dias sem nenhuma atualização na ficha. Utilize a aba 'Contatos' para falar com os Bispos responsáveis.", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontSize: 14)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 80),
               ],
             ),
-          ),
-
-          Container(
-            color: corFundo, padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-            child: TextField(
-              style: TextStyle(color: corTexto), onChanged: (valor) => setState(() => _termoBusca = valor),
-              decoration: InputDecoration(hintText: "Pesquisar em todas as estacas...", hintStyle: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey), prefixIcon: Icon(Icons.search, color: isEscuro ? Colors.white54 : Colors.grey), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, contentPadding: const EdgeInsets.symmetric(vertical: 0), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-            ),
-          ),
-          
-          Expanded(
-            child: arvoreGlobal.isEmpty
-                ? Center(child: Text("Nenhum jovem encontrado.", style: TextStyle(color: Colors.grey.shade500)))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16), itemCount: estacasOrdenadas.length,
-                    itemBuilder: (context, indexEstaca) {
-                      String estaca = estacasOrdenadas[indexEstaca];
-                      Map<String, List<Map<String, dynamic>>> alasDaEstaca = arvoreGlobal[estaca]!;
-                      List<String> alasOrdenadas = alasDaEstaca.keys.toList()..sort();
-                      int totalNaEstaca = alasDaEstaca.values.fold(0, (soma, lista) => soma + lista.length);
-
-                      return Card(
-                        color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
-                        child: Theme(
-                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                          
-                          // NÍVEL 1: ESTACA
-                          child: ExpansionTile(
-                            initiallyExpanded: _termoBusca.isNotEmpty, iconColor: Colors.teal, collapsedIconColor: Colors.grey,
-                            leading: CircleAvatar(backgroundColor: Colors.teal.withValues(alpha: 0.15), child: const Icon(Icons.map, color: Colors.teal)),
-                            title: Text(estaca, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
-                            subtitle: Text("$totalNaEstaca jovem(ns) na região", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey.shade600, fontSize: 13)),
-                            
-                            // NÍVEL 2: ALAS
-                            children: alasOrdenadas.map((unidade) {
-                              List<Map<String, dynamic>> jovensDaUnidade = alasDaEstaca[unidade]!;
-                              return Padding(
-                                padding: const EdgeInsets.only(left: 16.0),
-                                child: ExpansionTile(
-                                  initiallyExpanded: _termoBusca.isNotEmpty, iconColor: Colors.orange, collapsedIconColor: Colors.grey, leading: const Icon(Icons.church, color: Colors.orange),
-                                  title: Text(unidade, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: corTexto)),
-                                  subtitle: Text("${jovensDaUnidade.length} jovem(ns)", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey, fontSize: 12)),
-                                  
-                                  // NÍVEL 3: JOVENS
-                                  children: jovensDaUnidade.map((jovem) {
-                                    final estilo = _obterEstiloStatus(jovem['status']);
-                                    return Container(
-                                      decoration: BoxDecoration(border: Border(top: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade100))),
-                                      child: ListTile(
-                                        onTap: () => _abrirDetalhesJovem(jovem),
-                                        contentPadding: const EdgeInsets.only(left: 32, right: 16, top: 4, bottom: 4),
-                                        leading: Icon(estilo['icone'], color: estilo['cor'], size: 20),
-                                        title: Text(jovem['nome'], style: TextStyle(fontWeight: FontWeight.w600, color: corTexto)),
-                                        subtitle: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text("${jovem['idade']} anos", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey, fontSize: 12)),
-                                            _construirAlertaEstagnacao(jovem['ultima_atualizacao']),
-                                          ],
-                                        ),
-                                        trailing: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: estilo['cor'].withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Text(jovem['status'], style: TextStyle(fontSize: 10, color: estilo['cor'], fontWeight: FontWeight.bold))),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+          );
+        }
       ),
     );
   }

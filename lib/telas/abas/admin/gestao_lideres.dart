@@ -111,7 +111,7 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                     const SizedBox(height: 15),
 
                     DropdownButtonFormField<String>(
-                      value: cargoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                      initialValue: cargoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
                       decoration: InputDecoration(labelText: "Cargo", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.badge, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
                       items: _opcoesCargo.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                       onChanged: (val) {
@@ -129,7 +129,7 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
 
                     // DROPDOWN 1: ESCOLHER A ESTACA
                     DropdownButtonFormField<String>(
-                      value: estacaSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                      initialValue: estacaSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
                       decoration: InputDecoration(labelText: "Estaca da Liderança", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.map, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
                       items: _arvoreUnidades.keys.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                       onChanged: (val) {
@@ -144,7 +144,7 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
 
                     // DROPDOWN 2: ESCOLHER A ALA (Adapta-se à Estaca escolhida)
                     DropdownButtonFormField<String>(
-                      value: unidadeSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                      initialValue: unidadeSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
                       decoration: InputDecoration(labelText: "Unidade Específica", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.church, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
                       items: listaAlas.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                       onChanged: (val) => setStateModal(() => unidadeSelecionada = val!),
@@ -205,6 +205,7 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                                   throw Exception("Usuário criado antes da atualização. Recrie o acesso dele.");
                                 }
                               }
+                              // ignore: unnecessary_non_null_assertion
                               await FirebaseFirestore.instance.collection('usuarios').doc(liderAtual!.id).update(dadosFinais);
                             } else {
                               FirebaseApp appSecundario = await Firebase.initializeApp(name: 'AppSecundario', options: Firebase.app().options);
@@ -271,7 +272,7 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
               
               String nome = lider['nome'] ?? 'Sem Nome';
               String cargo = lider['cargo'] ?? 'Desconhecido';
-              String estaca = lider['estaca'] ?? 'Global';
+              String _ = lider['estaca'] ?? 'Global';
               String unidade = lider['unidade'] ?? 'Desconhecida';
               String usuarioLogin = lider['usuario'] ?? 'Sem Usuário';
               

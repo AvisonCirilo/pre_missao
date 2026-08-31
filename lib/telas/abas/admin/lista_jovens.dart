@@ -1,6 +1,8 @@
+// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../services/gerador_pdf.dart'; 
+import '../../../services/gerador_pdf.dart';
 
 class ListaGlobalJovensTela extends StatefulWidget {
   const ListaGlobalJovensTela({super.key});
@@ -10,10 +12,56 @@ class ListaGlobalJovensTela extends StatefulWidget {
 }
 
 class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
-  final List<String> _nomesEtapasRapazes = ["Aceitou o Desafio", "Ensino Médio", "Alistamento Militar", "Possui Mentor", "Metas com Bispo", "Exame Médico", "Exame Odonto", "Chamado Aberto"];
-  final List<String> _nomesEtapasMocas = ["Aceitou o Desafio", "Ensino Médio", "Possui Mentor", "Metas com Bispo", "Exame Médico", "Exame Odonto", "Chamado Aberto"];
-  
+  List<String> _nomesEtapasRapazes = ["Carregando..."];
+  List<String> _nomesEtapasMocas = ["Carregando..."];
+  StreamSubscription? _etapasSub;
+
+  Map<String, List<String>> _arvoreUnidades = {'Global (Todas)': ['Global (Todas)']};
   String _termoBusca = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _ouvirEtapasDoBanco();
+    _construirArvoreDoBanco();
+  }
+
+  void _ouvirEtapasDoBanco() {
+    _etapasSub = FirebaseFirestore.instance.collection('sistema').doc('etapas').snapshots().listen((doc) {
+      if (doc.exists && mounted) {
+        setState(() {
+          _nomesEtapasRapazes = List<String>.from(doc['rapazes'] ?? []);
+          _nomesEtapasMocas = List<String>.from(doc['mocas'] ?? []);
+        });
+      }
+    });
+  }
+
+  // Monta a estrutura de Estaca > Ala para o formulário de criação
+  void _construirArvoreDoBanco() {
+    FirebaseFirestore.instance.collection('unidades').snapshots().listen((snapshot) {
+      Map<String, List<String>> arvore = {'Global (Todas)': ['Global (Todas)']};
+      
+      for (var doc in snapshot.docs) {
+        String tipo = doc['tipo'] ?? '';
+        String nomeDaUnidade = "$tipo ${doc['nome']}";
+        String estacaPai = doc['estaca'] ?? 'Global (Todas)';
+
+        if (tipo == 'Estaca' || tipo == 'Distrito' || tipo == 'Missão') {
+          arvore.putIfAbsent(nomeDaUnidade, () => [nomeDaUnidade]); 
+        } else if (tipo == 'Ala' || tipo == 'Ramo') {
+          arvore.putIfAbsent(estacaPai, () => [estacaPai]).add(nomeDaUnidade);
+        }
+      }
+      if (mounted) setState(() => _arvoreUnidades = arvore);
+    });
+  }
+
+  @override
+  void dispose() {
+    _etapasSub?.cancel();
+    super.dispose();
+  }
 
   Map<String, dynamic> _obterEstiloStatus(String status) {
     switch (status) {
@@ -28,6 +76,7 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
     if (etapas.isEmpty) return 0.0;
     int concluidas = etapas.where((etapa) => etapa == true).length;
     int total = sexo == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
+    if (total == 0) return 0.0;
     return concluidas / total;
   }
 
@@ -55,7 +104,6 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
   List<Map<String, dynamic>> _calcularGargalos(List<Map<String, dynamic>> todosJovens) {
     Map<String, int> contagemEtapas = {};
     int totalPreparacao = 0;
-
     for (var jovem in todosJovens) {
       if (jovem['status'] == 'Preparação') {
         totalPreparacao++;
@@ -84,12 +132,173 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
     await GeradorPdf.gerarRelatorio("Visão Global (Todas as Estacas)", jovens);
   }
 
+  // ==========================================
+  // FORMULÁRIO COM MENUS EM CASCATA E VÍNCULO INTELIGENTE
+  // ==========================================
+  void _mostrarFormularioJovem({Map<String, dynamic>? jovemAtual}) {
+    bool isEdicao = jovemAtual != null;
+    bool isEscuro = Theme.of(context).brightness == Brightness.dark;
+    
+    final nomeCtrl = TextEditingController(text: isEdicao ? jovemAtual['nome'] : "");
+    final idadeCtrl = TextEditingController(text: isEdicao ? jovemAtual['idade'].toString() : "");
+    final telefoneCtrl = TextEditingController(text: isEdicao ? jovemAtual['telefone'] : "");
+    
+    String sexoSelecionado = isEdicao ? (jovemAtual['sexo'] ?? "Masculino") : "Masculino";
+    
+    String estacaSelecionada = isEdicao ? (jovemAtual['estaca'] ?? _arvoreUnidades.keys.first) : _arvoreUnidades.keys.first;
+    if (!_arvoreUnidades.containsKey(estacaSelecionada)) estacaSelecionada = _arvoreUnidades.keys.first;
+
+    List<String> listaAlas = _arvoreUnidades[estacaSelecionada]!;
+    String unidadeSelecionada = isEdicao ? (jovemAtual['unidade'] ?? listaAlas.first) : listaAlas.first;
+    if (!listaAlas.contains(unidadeSelecionada)) unidadeSelecionada = listaAlas.first;
+
+    bool salvando = false;
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setStateModal) {
+          return Container(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+            decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 40, height: 4, decoration: BoxDecoration(color: isEscuro ? Colors.white24 : Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(isEdicao ? Icons.edit : Icons.person_add, color: Colors.blue),
+                      const SizedBox(width: 10),
+                      Text(isEdicao ? "Editar Jovem" : "Novo Jovem", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
+                    ],
+                  ),
+                  const SizedBox(height: 25),
+                  
+                  TextField(
+                    controller: nomeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(labelText: "Nome do Jovem", prefixIcon: const Icon(Icons.person), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  Row(
+                    children: [
+                      Expanded(flex: 2, child: TextField(controller: idadeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.number, decoration: InputDecoration(labelText: "Idade", prefixIcon: const Icon(Icons.cake), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+                      const SizedBox(width: 15),
+                      Expanded(flex: 3, child: DropdownButtonFormField<String>(
+                        value: sexoSelecionado, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
+                        style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                        decoration: InputDecoration(filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                        items: ["Masculino", "Feminino"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                        onChanged: (val) => setStateModal(() => sexoSelecionado = val!),
+                      )),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp", prefixIcon: const Icon(Icons.phone), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+                  const SizedBox(height: 15),
+
+                  DropdownButtonFormField<String>(
+                    value: estacaSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(labelText: "Estaca / Distrito", prefixIcon: const Icon(Icons.map), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                    items: _arvoreUnidades.keys.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: (val) {
+                      setStateModal(() {
+                        estacaSelecionada = val!;
+                        listaAlas = _arvoreUnidades[estacaSelecionada]!;
+                        unidadeSelecionada = listaAlas.first; 
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  DropdownButtonFormField<String>(
+                    value: unidadeSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(labelText: "Ala / Ramo", prefixIcon: const Icon(Icons.church), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                    items: listaAlas.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: (val) => setStateModal(() => unidadeSelecionada = val!),
+                  ),
+                  const SizedBox(height: 30),
+                  
+                  SizedBox(
+                    width: double.infinity, height: 50,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      onPressed: salvando ? null : () async {
+                        if (nomeCtrl.text.trim().isEmpty) return;
+                        setStateModal(() => salvando = true);
+
+                        try {
+                          int totalEtapas = sexoSelecionado == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
+                          
+                          // Vínculo automático no Firebase com o Bispo local
+                          String bispoUidEncontrado = "";
+                          var queryLideres = await FirebaseFirestore.instance.collection('usuarios')
+                              .where('estaca', isEqualTo: estacaSelecionada)
+                              .where('unidade', isEqualTo: unidadeSelecionada)
+                              .get();
+                              
+                          if (queryLideres.docs.isNotEmpty) {
+                            for (var doc in queryLideres.docs) {
+                              String cargo = doc['cargo'] ?? '';
+                              if (cargo == 'Bispo' || cargo == 'Pres. de Ramo') { bispoUidEncontrado = doc.id; break; }
+                            }
+                            if (bispoUidEncontrado.isEmpty) bispoUidEncontrado = queryLideres.docs.first.id;
+                          }
+
+                          Map<String, dynamic> dados = {
+                            'nome': nomeCtrl.text.trim(),
+                            'idade': int.tryParse(idadeCtrl.text) ?? 0,
+                            'sexo': sexoSelecionado,
+                            'telefone': telefoneCtrl.text.trim(),
+                            'estaca': estacaSelecionada,
+                            'unidade': unidadeSelecionada,
+                            'bispo_uid': bispoUidEncontrado,
+                          };
+
+                          if (isEdicao) {
+                            if (jovemAtual['sexo'] != sexoSelecionado) {
+                              dados['etapas'] = List.generate(totalEtapas, (index) => false);
+                              dados['status'] = 'Perspectiva';
+                            }
+                            await FirebaseFirestore.instance.collection('jovens').doc(jovemAtual['id']).update(dados);
+                          } else {
+                            dados['status'] = 'Perspectiva';
+                            dados['etapas'] = List.generate(totalEtapas, (index) => false);
+                            dados['anotacoes'] = [];
+                            dados['ultima_atualizacao'] = FieldValue.serverTimestamp();
+                            await FirebaseFirestore.instance.collection('jovens').add(dados);
+                          }
+
+                          if (context.mounted) Navigator.pop(context);
+                        } catch(e) {
+                          setStateModal(() => salvando = false);
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.redAccent));
+                        }
+                      },
+                      icon: salvando ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.save),
+                      label: Text(isEdicao ? "Salvar Alterações" : "Adicionar Jovem", style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
   void _abrirDetalhesJovem(Map<String, dynamic> jovem) {
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     List<bool> etapasTemp = List<bool>.from(jovem['etapas'] ?? []); 
     List<String> listaEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
     
     while(etapasTemp.length < listaEtapas.length) { etapasTemp.add(false); }
+    if (etapasTemp.length > listaEtapas.length) { etapasTemp = etapasTemp.sublist(0, listaEtapas.length); }
 
     final estilo = _obterEstiloStatus(jovem['status'] ?? 'Perspectiva');
     TextEditingController notaCtrl = TextEditingController();
@@ -123,12 +332,16 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                         ],
                       ),
                     ),
-                    // BOTÃO DE EDITAR
-                    IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: () { Navigator.pop(context); /* Formulário de edição se necessário */ }),
                     
-                    // ==========================================
-                    // NOVO BOTÃO: EXCLUIR NA FICHA
-                    // ==========================================
+                    // BOTÃO EDITAR AGORA ABRE O FORMULÁRIO COM OS DADOS PREENCHIDOS
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.grey), 
+                      onPressed: () { 
+                        Navigator.pop(context); 
+                        _mostrarFormularioJovem(jovemAtual: jovem);
+                      }
+                    ),
+                    
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.redAccent), 
                       onPressed: () async { 
@@ -152,7 +365,7 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                         if (confirmar) {
                           await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).delete();
                           if (context.mounted) {
-                            Navigator.pop(context); // Fecha a ficha
+                            Navigator.pop(context); 
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jovem excluído com sucesso.'), backgroundColor: Colors.redAccent));
                           }
                         }
@@ -294,6 +507,13 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
         elevation: 1, 
         iconTheme: IconThemeData(color: corTexto),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _mostrarFormularioJovem(),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add),
+        label: const Text("Novo Jovem", style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('jovens').snapshots(),
         builder: (context, snapshot) {
@@ -409,9 +629,6 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                                           ultimaAtt = (jovem['ultima_atualizacao'] as Timestamp).toDate();
                                         }
 
-                                        // ==========================================
-                                        // NOVO: DISMISSIBLE PARA ARRASTAR E APAGAR
-                                        // ==========================================
                                         return Dismissible(
                                           key: Key(jovem['id']),
                                           direction: DismissDirection.endToStart,
