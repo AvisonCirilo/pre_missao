@@ -12,6 +12,29 @@ class AbaDashboardGestor extends StatefulWidget {
 class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
   int _indiceTocadoStatus = -1;
   int _indiceTocadoGenero = -1;
+  
+  // 1. Variável para segurar a conexão do banco de dados sem recriar toda hora
+  Stream<QuerySnapshot>? _streamJovens;
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciarConexaoBanco();
+  }
+
+  // Inicia a conexão com o Firebase apenas uma vez
+  void _iniciarConexaoBanco() {
+    _streamJovens = FirebaseFirestore.instance.collection('jovens').snapshots();
+  }
+
+  // 2. Função de Puxar para Atualizar (Pull-to-Refresh)
+  Future<void> _atualizarAoPuxar() async {
+    setState(() {
+      _iniciarConexaoBanco(); // Força uma nova busca no servidor
+    });
+    // Dá um tempo de 1 segundo para a animação de recarregamento ficar fluida
+    await Future.delayed(const Duration(seconds: 1)); 
+  }
 
   Widget _construirCartaoDashboard(String titulo, String valor, Color cor, IconData icone, bool isEscuro) {
     return Expanded(
@@ -89,8 +112,9 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(automaticallyImplyLeading: false, title: Text('Painel Analítico', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), backgroundColor: corFundo, elevation: 1),
+      
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('jovens').snapshots(),
+        stream: _streamJovens, // Usa a variável estabilizada
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.teal));
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Sistema vazio.", style: TextStyle(color: Colors.grey)));
@@ -111,81 +135,89 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
           int totalRapazes = todosJovens.where((j) => j['sexo'] == 'Masculino').length;
           int totalMocas = todosJovens.where((j) => j['sexo'] == 'Feminino').length;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro),
-                    const SizedBox(width: 10),
-                    _construirCartaoDashboard("Preparação", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.flight_takeoff, isEscuro),
-                    const SizedBox(width: 10),
-                    _construirCartaoDashboard("Estagnados", totalParados.toString(), Colors.redAccent, Icons.warning_amber_rounded, isEscuro),
-                  ],
-                ),
-                const SizedBox(height: 25),
-                Text("Proporção Geral", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _construirGraficoPizza(
-                      "Status do Processo", 
-                      [
-                        if (totalPerspectiva > 0) PieChartSectionData(value: totalPerspectiva.toDouble(), color: Colors.orange, title: '$totalPerspectiva', radius: _indiceTocadoStatus == 0 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                        if (totalPreparacao > 0) PieChartSectionData(value: totalPreparacao.toDouble(), color: Colors.blue, title: '$totalPreparacao', radius: _indiceTocadoStatus == 1 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                        if (totalEnviados > 0) PieChartSectionData(value: totalEnviados.toDouble(), color: Colors.green, title: '$totalEnviados', radius: _indiceTocadoStatus == 2 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                      ], 
-                      [
-                        _indicadorLegenda(Colors.orange, "Persp.", isEscuro),
-                        _indicadorLegenda(Colors.blue, "Prep.", isEscuro),
-                        _indicadorLegenda(Colors.green, "Env.", isEscuro),
-                      ],
-                      isEscuro
-                    ),
-                    const SizedBox(width: 10),
-                    _construirGraficoPizza(
-                      "Gênero", 
-                      [
-                        if (totalRapazes > 0) PieChartSectionData(value: totalRapazes.toDouble(), color: Colors.blue.shade700, title: '$totalRapazes', radius: _indiceTocadoGenero == 0 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                        if (totalMocas > 0) PieChartSectionData(value: totalMocas.toDouble(), color: Colors.pink.shade400, title: '$totalMocas', radius: _indiceTocadoGenero == 1 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                      ], 
-                      [
-                        _indicadorLegenda(Colors.blue.shade700, "Rapazes", isEscuro),
-                        _indicadorLegenda(Colors.pink.shade400, "Moças", isEscuro),
-                      ],
-                      isEscuro
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 25),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: corFundo, borderRadius: BorderRadius.circular(16), border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          // 3. Aplica o RefreshIndicator em volta de todo o conteúdo rolável
+          return RefreshIndicator(
+            onRefresh: _atualizarAoPuxar,
+            color: Colors.teal,
+            backgroundColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
+            child: SingleChildScrollView(
+              // Essa física permite puxar a tela mesmo se não houver rolagem o suficiente
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.lightbulb_outline, color: Colors.teal, size: 20), const SizedBox(width: 8),
-                          Text("Ação Recomendada", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text("Existem $totalParados jovens há mais de 30 dias sem nenhuma atualização na ficha. Utilize a aba 'Contatos' para falar com os Bispos responsáveis.", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontSize: 14)),
+                      _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro),
+                      const SizedBox(width: 10),
+                      _construirCartaoDashboard("Preparação", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro),
                     ],
                   ),
-                ),
-                const SizedBox(height: 80),
-              ],
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.flight_takeoff, isEscuro),
+                      const SizedBox(width: 10),
+                      _construirCartaoDashboard("Estagnados", totalParados.toString(), Colors.redAccent, Icons.warning_amber_rounded, isEscuro),
+                    ],
+                  ),
+                  const SizedBox(height: 25),
+                  Text("Proporção Geral", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _construirGraficoPizza(
+                        "Status do Processo", 
+                        [
+                          if (totalPerspectiva > 0) PieChartSectionData(value: totalPerspectiva.toDouble(), color: Colors.orange, title: '$totalPerspectiva', radius: _indiceTocadoStatus == 0 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                          if (totalPreparacao > 0) PieChartSectionData(value: totalPreparacao.toDouble(), color: Colors.blue, title: '$totalPreparacao', radius: _indiceTocadoStatus == 1 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                          if (totalEnviados > 0) PieChartSectionData(value: totalEnviados.toDouble(), color: Colors.green, title: '$totalEnviados', radius: _indiceTocadoStatus == 2 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ], 
+                        [
+                          _indicadorLegenda(Colors.orange, "Persp.", isEscuro),
+                          _indicadorLegenda(Colors.blue, "Prep.", isEscuro),
+                          _indicadorLegenda(Colors.green, "Env.", isEscuro),
+                        ],
+                        isEscuro
+                      ),
+                      const SizedBox(width: 10),
+                      _construirGraficoPizza(
+                        "Gênero", 
+                        [
+                          if (totalRapazes > 0) PieChartSectionData(value: totalRapazes.toDouble(), color: Colors.blue.shade700, title: '$totalRapazes', radius: _indiceTocadoGenero == 0 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                          if (totalMocas > 0) PieChartSectionData(value: totalMocas.toDouble(), color: Colors.pink.shade400, title: '$totalMocas', radius: _indiceTocadoGenero == 1 ? 35 : 30, titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ], 
+                        [
+                          _indicadorLegenda(Colors.blue.shade700, "Rapazes", isEscuro),
+                          _indicadorLegenda(Colors.pink.shade400, "Moças", isEscuro),
+                        ],
+                        isEscuro
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 25),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: corFundo, borderRadius: BorderRadius.circular(16), border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.lightbulb_outline, color: Colors.teal, size: 20), const SizedBox(width: 8),
+                            Text("Ação Recomendada", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text("Existem $totalParados jovens há mais de 30 dias sem nenhuma atualização na ficha. Utilize a aba 'Contatos' para falar com os Bispos responsáveis.", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 80),
+                ],
+              ),
             ),
           );
         }

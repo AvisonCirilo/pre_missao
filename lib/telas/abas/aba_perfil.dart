@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../main.dart'; 
+import '../../../main.dart';
+
 import '../chamados_enviados.dart';
 import '../../services/gerador_pdf.dart';
 import '../login_tela.dart';
 
 class AbaPerfil extends StatefulWidget {
   final String nivelAcesso; 
+
   const AbaPerfil({super.key, required this.nivelAcesso});
 
   @override
@@ -29,9 +31,6 @@ class _AbaPerfilState extends State<AbaPerfil> {
     _carregarPerfilBanco();
   }
 
-  // ==========================================
-  // CARREGA OS DADOS DO USUÁRIO LOGADO
-  // ==========================================
   Future<void> _carregarPerfilBanco() async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
@@ -46,7 +45,6 @@ class _AbaPerfilState extends State<AbaPerfil> {
             _unidadeLider = dados['unidade'] ?? "Global (Todas)";
             _estacaLider = dados['estaca'] ?? "Global (Todas)";
 
-            // Define a cor baseada no nível de acesso
             if (widget.nivelAcesso == 'Estaca') {
               _corPrincipal = Colors.purple;
             } else if (widget.nivelAcesso == 'Gestor') {
@@ -63,49 +61,37 @@ class _AbaPerfilState extends State<AbaPerfil> {
       }
     } catch (e) {
       if (mounted) setState(() => _carregando = false);
-      debugPrint("Erro ao carregar perfil: $e");
     }
   }
 
   // ==========================================
-  // EXPORTAR PDF COM FILTRO INTELIGENTE
+  // BUSCA INTELIGENTE DE DADOS
   // ==========================================
-  Future<void> _gerarRelatorioInteligente() async {
+  Future<List<Map<String, dynamic>>> _buscarDadosParaExportacao() async {
+    QuerySnapshot query;
+    if (widget.nivelAcesso == 'Admin' || widget.nivelAcesso == 'Gestor') {
+      query = await FirebaseFirestore.instance.collection('jovens').get();
+    } else if (widget.nivelAcesso == 'Estaca') {
+      query = await FirebaseFirestore.instance.collection('jovens').where('estaca', isEqualTo: _estacaLider).get();
+    } else {
+      query = await FirebaseFirestore.instance.collection('jovens').where('unidade', isEqualTo: _unidadeLider).get();
+    }
+
+    return query.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+  }
+
+  Future<void> _gerarRelatorioPDF() async {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando dados e gerando PDF...'), duration: Duration(seconds: 2)));
-
     try {
-      QuerySnapshot query;
-
-      // Filtra os jovens de acordo com o nível de acesso de quem clicou no botão!
-      if (widget.nivelAcesso == 'Admin' || widget.nivelAcesso == 'Gestor') {
-        query = await FirebaseFirestore.instance.collection('jovens').get();
-      } else if (widget.nivelAcesso == 'Estaca') {
-        query = await FirebaseFirestore.instance.collection('jovens').where('estaca', isEqualTo: _estacaLider).get();
-      } else {
-        query = await FirebaseFirestore.instance.collection('jovens').where('unidade', isEqualTo: _unidadeLider).get();
-      }
-
-      List<Map<String, dynamic>> jovensParaRelatorio = query.docs.map((doc) {
-        var j = doc.data() as Map<String, dynamic>;
-        return {
-          'nome': j['nome'] ?? 'Sem Nome',
-          'idade': j['idade'] ?? 0,
-          'status': j['status'] ?? 'Perspectiva',
-          'telefone': j['telefone'] ?? 'Não informado',
-          'data_envio': j['data_envio'] ?? 'Não registrada', 
-          'destino': j['destino'] ?? 'Aguardando Carta',
-        };
-      }).toList();
-
-      if (jovensParaRelatorio.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum jovem encontrado para exportar.'), backgroundColor: Colors.orange));
+      List<Map<String, dynamic>> jovens = await _buscarDadosParaExportacao();
+      if (jovens.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum jovem encontrado.'), backgroundColor: Colors.orange));
         return;
       }
-
-      await GeradorPdf.gerarRelatorio(_unidadeLider, jovensParaRelatorio);
-
+      String titulo = widget.nivelAcesso == 'Gestor' || widget.nivelAcesso == 'Admin' ? 'Visão Global' : _unidadeLider;
+      await GeradorPdf.gerarRelatorio(titulo, jovens);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao gerar PDF: $e'), backgroundColor: Colors.redAccent));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.redAccent));
     }
   }
 
@@ -175,7 +161,7 @@ class _AbaPerfilState extends State<AbaPerfil> {
             
             Align(
               alignment: Alignment.centerLeft,
-              child: Text("Ferramentas", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade400)),
+              child: Text("Ferramentas de Relatório", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade400)),
             ),
             const SizedBox(height: 10),
             Card(
@@ -198,11 +184,11 @@ class _AbaPerfilState extends State<AbaPerfil> {
                   ),
                   Divider(height: 1, color: isEscuro ? Colors.white12 : Colors.grey.shade200),
                   ListTile(
-                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.picture_as_pdf, color: Colors.green)),
+                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.picture_as_pdf, color: Colors.red)),
                     title: Text("Exportar Relatório (PDF)", style: TextStyle(color: corTexto)),
-                    subtitle: Text("Gera um resumo gerencial da sua unidade", style: TextStyle(color: Colors.grey.shade500)),
+                    subtitle: Text("Gera um PDF visual agrupado por unidade", style: TextStyle(color: Colors.grey.shade500)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                    onTap: _gerarRelatorioInteligente,
+                    onTap: _gerarRelatorioPDF,
                   ),
                 ],
               ),

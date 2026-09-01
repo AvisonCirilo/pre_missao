@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'admin/lista_jovens.dart';
 import 'admin/gestao_lideres.dart';
 import './admin/gestao_unidades.dart';
-import 'admin/gestao_etapas.dart'; // NOVA IMPORTAÇÃO AQUI
+import 'admin/gestao_etapas.dart'; 
 
 class AbaAdmin extends StatefulWidget {
   const AbaAdmin({super.key});
@@ -14,7 +15,100 @@ class AbaAdmin extends StatefulWidget {
 
 class _AbaAdminState extends State<AbaAdmin> {
   // ==========================================
-  // WIDGET AUXILIAR: ESTATÍSTICAS EM TEMPO REAL (ATUALIZADO)
+  // LÓGICA DE LIMPEZA DE REGISTROS ANTIGOS
+  // ==========================================
+  Future<void> _limparRegistrosAntigos() async {
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.redAccent))
+    );
+
+    try {
+      var enviados = await FirebaseFirestore.instance.collection('jovens').where('status', isEqualTo: 'Enviado').get();
+      List<DocumentSnapshot> paraDeletar = [];
+      
+      DateTime umAnoAtras = DateTime.now().subtract(const Duration(days: 365));
+      
+      for (var doc in enviados.docs) {
+        var dados = doc.data() as Map<String, dynamic>;
+        String dataEnvio = dados['data_envio'] ?? '';
+        bool adicionado = false;
+
+        if (dataEnvio.isNotEmpty && dataEnvio.contains('/')) {
+          var partes = dataEnvio.split('/');
+          if (partes.length == 3) {
+            int dia = int.tryParse(partes[0]) ?? 1;
+            int mes = int.tryParse(partes[1]) ?? 1;
+            int ano = int.tryParse(partes[2]) ?? 2000;
+            DateTime dataDoEnvio = DateTime(ano, mes, dia);
+            
+            if (dataDoEnvio.isBefore(umAnoAtras)) {
+              paraDeletar.add(doc);
+              adicionado = true;
+            }
+          }
+        }
+        
+        if (!adicionado && dados['ultima_atualizacao'] != null) {
+          DateTime att = (dados['ultima_atualizacao'] as Timestamp).toDate();
+          if (att.isBefore(umAnoAtras)) {
+            paraDeletar.add(doc);
+          }
+        }
+      }
+      
+      if (mounted) Navigator.pop(context);
+      
+      if (paraDeletar.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O sistema está limpo. Nenhum jovem foi enviado há mais de 1 ano.'), backgroundColor: Colors.green));
+        return;
+      }
+      
+      if (mounted) {
+        bool confirmar = await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E1E) : Colors.white,
+            title: const Row(children: [Icon(Icons.warning, color: Colors.redAccent), SizedBox(width: 8), Text("Atenção!")]),
+            content: Text("Encontramos ${paraDeletar.length} jovem(ns) enviados para a missão há mais de 1 ano.\n\nDeseja excluir permanentemente essas fichas do sistema para liberar espaço?"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                onPressed: () => Navigator.pop(context, true), 
+                child: const Text("Sim, Excluir", style: TextStyle(color: Colors.white))
+              ),
+            ]
+          )
+        ) ?? false;
+        
+        if (confirmar) {
+          if (mounted) showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.redAccent)));
+          
+          int deletados = 0;
+          for (var doc in paraDeletar) {
+            await FirebaseFirestore.instance.collection('jovens').doc(doc.id).delete();
+            deletados++;
+          }
+          
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$deletados registros antigos foram apagados com sucesso!'), backgroundColor: Colors.green));
+          }
+        }
+      }
+      
+    } catch(e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro na varredura: $e'), backgroundColor: Colors.redAccent));
+      }
+    }
+  }
+
+  // ==========================================
+  // WIDGET AUXILIAR: ESTATÍSTICAS EM TEMPO REAL 
   // ==========================================
   Widget _construirCardEstatistica(
     String titulo,
@@ -173,15 +267,15 @@ class _AbaAdminState extends State<AbaAdmin> {
                 _construirCardEstatistica("Estacas", Colors.purple, Icons.map, isEscuro, FirebaseFirestore.instance.collection('unidades').where('tipo', whereIn: ['Estaca', 'Distrito', 'Missão']).snapshots()),
               ],
             ),
-            const SizedBox(height: 35),
 
+            const SizedBox(height: 35),
             Text("Gestão de Acessos", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
             _construirBotaoAcao("Gerenciar Líderes", "Criar contas, alterar senhas e remover acessos de bispos e líderes da missão.", Icons.manage_accounts, Colors.blue, isEscuro, () {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const GestaoLideresTela()));
             }),
-            const SizedBox(height: 25),
 
+            const SizedBox(height: 25),
             Text("Estrutura da Igreja", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
             _construirBotaoAcao("Gerenciar Alas e Ramos", "Adicionar ou renomear as unidades que aparecerão no aplicativo.", Icons.church, Colors.orange, isEscuro, () {
@@ -190,12 +284,11 @@ class _AbaAdminState extends State<AbaAdmin> {
             _construirBotaoAcao("Lista Global de Jovens", "Acessar e pesquisar todos os jovens cadastrados em todas as unidades.", Icons.format_list_bulleted, Colors.green, isEscuro, () {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const ListaGlobalJovensTela()));
             }),
-            const SizedBox(height: 25),
 
+            const SizedBox(height: 25),
             Text("Sistema", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
             
-            // NOVO BOTÃO: CHECKLIST DINÂMICO
             _construirBotaoAcao(
               "Checklist Dinâmico",
               "Personalizar as etapas, adicionar ou remover tarefas para os missionários.",
@@ -210,8 +303,8 @@ class _AbaAdminState extends State<AbaAdmin> {
               },
             ),
             
-            _construirBotaoAcao("Exportar Banco de Dados", "Baixar uma cópia completa de segurança (Backup) de todas as informações.", Icons.cloud_download, Colors.purple, isEscuro, () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Iniciando Backup...')))),
-            _construirBotaoAcao("Limpar Registros Antigos", "Excluir jovens que já viajaram para a missão há mais de 1 ano.", Icons.delete_sweep, Colors.redAccent, isEscuro, () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Acesso Restrito!')))),
+            _construirBotaoAcao("Limpar Registros Antigos", "Excluir jovens que já viajaram para a missão há mais de 1 ano.", Icons.delete_sweep, Colors.redAccent, isEscuro, _limparRegistrosAntigos),
+            
             const SizedBox(height: 40),
           ],
         ),

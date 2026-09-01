@@ -6,16 +6,21 @@ class GeradorPdf {
   static Future<void> gerarRelatorio(String tituloRelatorio, List<Map<String, dynamic>> jovens) async {
     final pdf = pw.Document();
 
-    // MÁGICA: Agrupa os jovens por Estaca e Ala
-    Map<String, List<Map<String, dynamic>>> jovensPorUnidade = {};
+    // ==========================================
+    // MÁGICA: HIERARQUIA DE ESTACA > ALA
+    // ==========================================
+    Map<String, Map<String, List<Map<String, dynamic>>>> arvorePDF = {};
+    
     for (var j in jovens) {
-      String estaca = j['estaca'] ?? 'Sem Estaca';
-      String unidade = j['unidade'] ?? 'Sem Ala';
-      String chave = "$estaca - $unidade";
-      jovensPorUnidade.putIfAbsent(chave, () => []).add(j);
+      // Tratamento para evitar campos vazios quebrando o layout
+      String estaca = (j['estaca'] == null || j['estaca'].toString().trim().isEmpty) ? 'Sem Estaca' : j['estaca'];
+      String unidade = (j['unidade'] == null || j['unidade'].toString().trim().isEmpty) ? 'Sem Ala' : j['unidade'];
+
+      arvorePDF.putIfAbsent(estaca, () => {});
+      arvorePDF[estaca]!.putIfAbsent(unidade, () => []).add(j);
     }
 
-    List<String> chavesOrdenadas = jovensPorUnidade.keys.toList()..sort();
+    List<String> estacasOrdenadas = arvorePDF.keys.toList()..sort();
 
     pdf.addPage(
       pw.MultiPage(
@@ -42,59 +47,89 @@ class GeradorPdf {
             pw.SizedBox(height: 10),
           ];
 
-          // GERA UM BLOCO PARA CADA ALA/UNIDADE ENCONTRADA NO FILTRO
-          for (String chave in chavesOrdenadas) {
-            var listaJovens = jovensPorUnidade[chave]!;
-            var prep = listaJovens.where((j) => j['status'] != 'Enviado').toList();
-            var env = listaJovens.where((j) => j['status'] == 'Enviado').toList();
+          if (jovens.isEmpty) {
+            conteudos.add(pw.Text('Nenhum dado encontrado para gerar o relatório.', style: const pw.TextStyle(color: PdfColors.grey600)));
+            return conteudos;
+          }
 
+          // ==========================================
+          // CONSTRUÇÃO DOS BLOCOS VISUAIS
+          // ==========================================
+          for (String estaca in estacasOrdenadas) {
+            
+            // CABEÇALHO DA ESTACA (Destaque principal)
             conteudos.add(
               pw.Container(
                 width: double.infinity,
-                margin: const pw.EdgeInsets.only(top: 15, bottom: 10),
-                padding: const pw.EdgeInsets.all(6),
-                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                child: pw.Text(chave, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                margin: const pw.EdgeInsets.only(top: 20, bottom: 10),
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue800,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Text(estaca.toUpperCase(), style: pw.TextStyle(color: PdfColors.white, fontSize: 14, fontWeight: pw.FontWeight.bold)),
               ),
             );
 
-            if (prep.isNotEmpty) {
-              conteudos.add(pw.Text('Em Preparação / Perspectiva', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)));
-              conteudos.add(pw.SizedBox(height: 5));
+            Map<String, List<Map<String, dynamic>>> alasDaEstaca = arvorePDF[estaca]!;
+            List<String> alasOrdenadas = alasDaEstaca.keys.toList()..sort();
+
+            for (String ala in alasOrdenadas) {
+              
+              // CABEÇALHO DA ALA (Subtítulo cinza claro)
               conteudos.add(
-                pw.TableHelper.fromTextArray(
-                  headers: ['Nome', 'Idade', 'Status', 'Telefone'],
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
-                  rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
-                  cellStyle: const pw.TextStyle(fontSize: 10),
-                  cellPadding: const pw.EdgeInsets.all(6),
-                  data: prep.map((j) => [j['nome'], j['idade'].toString(), j['status'] ?? '', j['telefone'] ?? '']).toList(),
+                pw.Container(
+                  width: double.infinity,
+                  margin: const pw.EdgeInsets.only(top: 10, bottom: 8),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: const pw.BoxDecoration(
+                    border: pw.Border(left: pw.BorderSide(color: PdfColors.blue800, width: 4)),
+                    color: PdfColors.grey200,
+                  ),
+                  child: pw.Text(ala, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
                 ),
               );
-              conteudos.add(pw.SizedBox(height: 10));
-            }
 
-            if (env.isNotEmpty) {
-              conteudos.add(pw.Text('Chamados Enviados', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)));
-              conteudos.add(pw.SizedBox(height: 5));
-              conteudos.add(
-                pw.TableHelper.fromTextArray(
-                  headers: ['Nome', 'Idade', 'Data Envio', 'Destino'],
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.green800),
-                  rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
-                  cellStyle: const pw.TextStyle(fontSize: 10),
-                  cellPadding: const pw.EdgeInsets.all(6),
-                  data: env.map((j) => [j['nome'], j['idade'].toString(), j['data_envio'] ?? '', j['destino'] ?? '']).toList(),
-                ),
-              );
-              conteudos.add(pw.SizedBox(height: 15));
-            }
-          }
+              var listaJovens = alasDaEstaca[ala]!;
+              var prep = listaJovens.where((j) => j['status'] != 'Enviado').toList();
+              var env = listaJovens.where((j) => j['status'] == 'Enviado').toList();
 
-          if (jovens.isEmpty) {
-            conteudos.add(pw.Text('Nenhum dado encontrado para gerar o relatório.', style: const pw.TextStyle(color: PdfColors.grey600)));
+              // TABELA: JOVENS EM PREPARAÇÃO
+              if (prep.isNotEmpty) {
+                conteudos.add(pw.Text('Em Preparação / Perspectiva', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)));
+                conteudos.add(pw.SizedBox(height: 4));
+                conteudos.add(
+                  pw.TableHelper.fromTextArray(
+                    headers: ['Nome', 'Idade', 'Status', 'Telefone'],
+                    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.black, fontSize: 9),
+                    headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                    rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+                    cellStyle: const pw.TextStyle(fontSize: 9),
+                    cellPadding: const pw.EdgeInsets.all(6),
+                    data: prep.map((j) => [j['nome'], j['idade'].toString(), j['status'] ?? '', j['telefone'] ?? '']).toList(),
+                  ),
+                );
+                conteudos.add(pw.SizedBox(height: 10));
+              }
+
+              // TABELA: CHAMADOS ENVIADOS
+              if (env.isNotEmpty) {
+                conteudos.add(pw.Text('Chamados Enviados', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)));
+                conteudos.add(pw.SizedBox(height: 4));
+                conteudos.add(
+                  pw.TableHelper.fromTextArray(
+                    headers: ['Nome', 'Idade', 'Data Envio', 'Destino'],
+                    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.black, fontSize: 9),
+                    headerDecoration: const pw.BoxDecoration(color: PdfColors.green100),
+                    rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+                    cellStyle: const pw.TextStyle(fontSize: 9),
+                    cellPadding: const pw.EdgeInsets.all(6),
+                    data: env.map((j) => [j['nome'], j['idade'].toString(), j['data_envio'] ?? '', j['destino'] ?? '']).toList(),
+                  ),
+                );
+                conteudos.add(pw.SizedBox(height: 15));
+              }
+            }
           }
 
           return conteudos;

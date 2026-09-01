@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/gerador_pdf.dart';
 
 class ListaGlobalJovensTela extends StatefulWidget {
@@ -16,14 +17,38 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
   List<String> _nomesEtapasMocas = ["Carregando..."];
   StreamSubscription? _etapasSub;
 
-  Map<String, List<String>> _arvoreUnidades = {'Global (Todas)': ['Global (Todas)']};
+  Map<String, List<String>> _arvoreUnidades = {};
   String _termoBusca = '';
+  
+  String _minhaEstaca = "";
+  String _nivelAcesso = "Admin";
+  bool _carregandoPerfil = true;
 
   @override
   void initState() {
     super.initState();
-    _ouvirEtapasDoBanco();
-    _construirArvoreDoBanco();
+    _carregarPerfilLider();
+  }
+
+  Future<void> _carregarPerfilLider() async {
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        var doc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          var dados = doc.data() as Map<String, dynamic>? ?? {};
+          setState(() {
+            _minhaEstaca = dados['estaca'] ?? "";
+            _nivelAcesso = dados['nivel_acesso'] ?? "Admin";
+            _carregandoPerfil = false;
+          });
+          _ouvirEtapasDoBanco();
+          _construirArvoreDoBanco();
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _carregandoPerfil = false);
+    }
   }
 
   void _ouvirEtapasDoBanco() {
@@ -37,20 +62,29 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
     });
   }
 
-  // Monta a estrutura de Estaca > Ala para o formulário de criação
   void _construirArvoreDoBanco() {
     FirebaseFirestore.instance.collection('unidades').snapshots().listen((snapshot) {
-      Map<String, List<String>> arvore = {'Global (Todas)': ['Global (Todas)']};
+      Map<String, List<String>> arvore = {};
       
       for (var doc in snapshot.docs) {
         String tipo = doc['tipo'] ?? '';
         String nomeDaUnidade = "$tipo ${doc['nome']}";
-        String estacaPai = doc['estaca'] ?? 'Global (Todas)';
+        String estacaPai = doc['estaca'] ?? '';
 
-        if (tipo == 'Estaca' || tipo == 'Distrito' || tipo == 'Missão') {
-          arvore.putIfAbsent(nomeDaUnidade, () => [nomeDaUnidade]); 
-        } else if (tipo == 'Ala' || tipo == 'Ramo') {
-          arvore.putIfAbsent(estacaPai, () => [estacaPai]).add(nomeDaUnidade);
+        if (_nivelAcesso == 'Estaca') {
+          if ((tipo == 'Estaca' || tipo == 'Distrito' || tipo == 'Missão') && nomeDaUnidade == _minhaEstaca) {
+            arvore.putIfAbsent(nomeDaUnidade, () => []); 
+          } else if ((tipo == 'Ala' || tipo == 'Ramo') && estacaPai == _minhaEstaca) {
+            arvore.putIfAbsent(estacaPai, () => []).add(nomeDaUnidade);
+          }
+        } else {
+          if (tipo == 'Estaca' || tipo == 'Distrito' || tipo == 'Missão') {
+            arvore.putIfAbsent(nomeDaUnidade, () => []); 
+          } else if (tipo == 'Ala' || tipo == 'Ramo') {
+            if (estacaPai.isNotEmpty && estacaPai != 'Global (Todas)') {
+              arvore.putIfAbsent(estacaPai, () => []).add(nomeDaUnidade);
+            }
+          }
         }
       }
       if (mounted) setState(() => _arvoreUnidades = arvore);
@@ -127,15 +161,12 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
     }).toList();
   }
 
-  void _exportarRelatorioPDF(List<Map<String, dynamic>> jovens) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gerando PDF Global...')));
-    await GeradorPdf.gerarRelatorio("Visão Global (Todas as Estacas)", jovens);
-  }
-
-  // ==========================================
-  // FORMULÁRIO COM MENUS EM CASCATA E VÍNCULO INTELIGENTE
-  // ==========================================
   void _mostrarFormularioJovem({Map<String, dynamic>? jovemAtual}) {
+    if (_arvoreUnidades.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Você precisa cadastrar uma Ala primeiro!'), backgroundColor: Colors.redAccent));
+      return;
+    }
+
     bool isEdicao = jovemAtual != null;
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     
@@ -149,6 +180,8 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
     if (!_arvoreUnidades.containsKey(estacaSelecionada)) estacaSelecionada = _arvoreUnidades.keys.first;
 
     List<String> listaAlas = _arvoreUnidades[estacaSelecionada]!;
+    if (listaAlas.isEmpty) listaAlas = ['Nenhuma Ala Cadastrada'];
+
     String unidadeSelecionada = isEdicao ? (jovemAtual['unidade'] ?? listaAlas.first) : listaAlas.first;
     if (!listaAlas.contains(unidadeSelecionada)) unidadeSelecionada = listaAlas.first;
 
@@ -205,10 +238,11 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                     value: estacaSelecionada, dropdownColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
                     decoration: InputDecoration(labelText: "Estaca / Distrito", prefixIcon: const Icon(Icons.map), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
                     items: _arvoreUnidades.keys.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                    onChanged: (val) {
+                    onChanged: _nivelAcesso == 'Estaca' ? null : (val) {
                       setStateModal(() {
                         estacaSelecionada = val!;
                         listaAlas = _arvoreUnidades[estacaSelecionada]!;
+                        if (listaAlas.isEmpty) listaAlas = ['Nenhuma Ala Cadastrada'];
                         unidadeSelecionada = listaAlas.first; 
                       });
                     },
@@ -229,12 +263,16 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                       onPressed: salvando ? null : () async {
                         if (nomeCtrl.text.trim().isEmpty) return;
+                        if (unidadeSelecionada == 'Nenhuma Ala Cadastrada') {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Crie uma Ala nesta Estaca primeiro!'), backgroundColor: Colors.redAccent));
+                          return;
+                        }
+
                         setStateModal(() => salvando = true);
 
                         try {
                           int totalEtapas = sexoSelecionado == 'Masculino' ? _nomesEtapasRapazes.length : _nomesEtapasMocas.length;
                           
-                          // Vínculo automático no Firebase com o Bispo local
                           String bispoUidEncontrado = "";
                           var queryLideres = await FirebaseFirestore.instance.collection('usuarios')
                               .where('estaca', isEqualTo: estacaSelecionada)
@@ -298,7 +336,7 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
     List<String> listaEtapas = jovem['sexo'] == 'Masculino' ? _nomesEtapasRapazes : _nomesEtapasMocas;
     
     while(etapasTemp.length < listaEtapas.length) { etapasTemp.add(false); }
-    if (etapasTemp.length > listaEtapas.length) { etapasTemp = etapasTemp.sublist(0, listaEtapas.length); }
+    if(etapasTemp.length > listaEtapas.length) { etapasTemp = etapasTemp.sublist(0, listaEtapas.length); }
 
     final estilo = _obterEstiloStatus(jovem['status'] ?? 'Perspectiva');
     TextEditingController notaCtrl = TextEditingController();
@@ -332,8 +370,6 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                         ],
                       ),
                     ),
-                    
-                    // BOTÃO EDITAR AGORA ABRE O FORMULÁRIO COM OS DADOS PREENCHIDOS
                     IconButton(
                       icon: const Icon(Icons.edit, color: Colors.grey), 
                       onPressed: () { 
@@ -341,7 +377,6 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                         _mostrarFormularioJovem(jovemAtual: jovem);
                       }
                     ),
-                    
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.redAccent), 
                       onPressed: () async { 
@@ -350,7 +385,7 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                           builder: (context) => AlertDialog(
                             backgroundColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
                             title: Text("Excluir Jovem", style: TextStyle(color: isEscuro ? Colors.white : Colors.black)),
-                            content: Text("Deseja apagar permanentemente a ficha de ${jovem['nome']}? Essa ação não pode ser desfeita.", style: TextStyle(color: isEscuro ? Colors.white : Colors.black)),
+                            content: Text("Deseja apagar permanentemente a ficha de ${jovem['nome']}?", style: TextStyle(color: isEscuro ? Colors.white : Colors.black)),
                             actions: [
                               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
                               ElevatedButton(
@@ -468,12 +503,21 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                       if (progFinal == 1.0) novoStatus = 'Enviado';
                       else if (progFinal > 0.0) novoStatus = 'Preparação';
 
-                      await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).update({
+                      // LOGICA DE CARIMBO DE DATA AQUI
+                      Map<String, dynamic> dadosAtualizados = {
                         'etapas': etapasTemp,
                         'anotacoes': notas,
                         'status': novoStatus,
                         'ultima_atualizacao': FieldValue.serverTimestamp(),
-                      });
+                      };
+
+                      if (novoStatus == 'Enviado' && jovem['status'] != 'Enviado') {
+                        DateTime hoje = DateTime.now();
+                        String dataFormatada = "${hoje.day.toString().padLeft(2, '0')}/${hoje.month.toString().padLeft(2, '0')}/${hoje.year}";
+                        dadosAtualizados['data_envio'] = dataFormatada;
+                      }
+
+                      await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).update(dadosAtualizados);
 
                       if (context.mounted) {
                         Navigator.pop(context);
@@ -502,14 +546,14 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text('Lista Global de Jovens', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), 
+        title: Text(_nivelAcesso == 'Estaca' ? 'Jovens da Estaca' : 'Lista Global de Jovens', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), 
         backgroundColor: corFundo, 
         elevation: 1, 
         iconTheme: IconThemeData(color: corTexto),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _mostrarFormularioJovem(),
-        backgroundColor: Colors.blue,
+        backgroundColor: _nivelAcesso == 'Estaca' ? Colors.purple : Colors.blue,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add),
         label: const Text("Novo Jovem", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -524,6 +568,9 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
             var dados = doc.data() as Map<String, dynamic>;
             dados['id'] = doc.id; 
             return dados;
+          }).where((jovem) {
+            if (_nivelAcesso == 'Estaca') return jovem['estaca'] == _minhaEstaca;
+            return true;
           }).toList();
 
           List<Map<String, dynamic>> jovensFiltrados = todosJovens.where((jovem) {
@@ -544,20 +591,6 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
 
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 16.0, right: 16, left: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 45,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _exportarRelatorioPDF(jovensFiltrados),
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                    label: const Text("Exportar Relatório em PDF", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                    style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  ),
-                ),
-              ),
-
               if (gargalos.isNotEmpty && _termoBusca.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(16), margin: const EdgeInsets.all(16),
@@ -567,7 +600,7 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.analytics, color: Colors.blue, size: 20), const SizedBox(width: 8),
+                          Icon(Icons.analytics, color: _nivelAcesso == 'Estaca' ? Colors.purple : Colors.blue, size: 20), const SizedBox(width: 8),
                           Text("Gargalos na Região", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
                         ],
                       ),
@@ -611,9 +644,10 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                             child: Theme(
                               data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                               child: ExpansionTile(
-                                initiallyExpanded: _termoBusca.isNotEmpty, iconColor: Colors.purple, collapsedIconColor: Colors.grey,
-                                leading: CircleAvatar(backgroundColor: Colors.purple.withValues(alpha: 0.15), child: const Icon(Icons.map, color: Colors.purple)),
-                                title: Text(estaca, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)), subtitle: Text("$totalEstaca jovem(ns) na região", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey.shade600, fontSize: 13)),
+                                initiallyExpanded: _termoBusca.isNotEmpty || _nivelAcesso == 'Estaca', 
+                                iconColor: _nivelAcesso == 'Estaca' ? Colors.teal : Colors.purple, collapsedIconColor: Colors.grey,
+                                leading: CircleAvatar(backgroundColor: (_nivelAcesso == 'Estaca' ? Colors.teal : Colors.purple).withValues(alpha: 0.15), child: Icon(Icons.map, color: _nivelAcesso == 'Estaca' ? Colors.teal : Colors.purple)),
+                                title: Text(estaca, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)), subtitle: Text("$totalEstaca jovem(ns) listados", style: TextStyle(color: isEscuro ? Colors.white54 : Colors.grey.shade600, fontSize: 13)),
                                 children: alasOrdenadas.map((unidade) {
                                   List<Map<String, dynamic>> jovensDaUnidade = alasDaEstaca[unidade]!;
                                   return Padding(
@@ -632,19 +666,14 @@ class _ListaGlobalJovensTelaState extends State<ListaGlobalJovensTela> {
                                         return Dismissible(
                                           key: Key(jovem['id']),
                                           direction: DismissDirection.endToStart,
-                                          background: Container(
-                                            alignment: Alignment.centerRight,
-                                            padding: const EdgeInsets.only(right: 20),
-                                            color: Colors.redAccent,
-                                            child: const Icon(Icons.delete, color: Colors.white),
-                                          ),
+                                          background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), color: Colors.redAccent, child: const Icon(Icons.delete, color: Colors.white)),
                                           confirmDismiss: (direction) async {
                                             return await showDialog(
                                               context: context,
                                               builder: (context) => AlertDialog(
                                                 backgroundColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
                                                 title: Text("Confirmar Exclusão", style: TextStyle(color: isEscuro ? Colors.white : Colors.black)),
-                                                content: Text("Tem certeza que deseja excluir a ficha de ${jovem['nome']} do sistema?", style: TextStyle(color: isEscuro ? Colors.white : Colors.black)),
+                                                content: Text("Deseja apagar permanentemente a ficha de ${jovem['nome']}?", style: TextStyle(color: isEscuro ? Colors.white : Colors.black)),
                                                 actions: [
                                                   TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
                                                   ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), onPressed: () => Navigator.of(context).pop(true), child: const Text("Excluir")),

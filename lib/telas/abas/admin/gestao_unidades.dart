@@ -110,7 +110,7 @@ class _GestaoUnidadesTelaState extends State<GestaoUnidadesTela> {
                       controller: nomeCtrl,
                       style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
                       decoration: InputDecoration(
-                        labelText: "Nome (Ex: Centro)",
+                        labelText: "Nome da Ala",
                         labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700),
                         prefixIcon: Icon(Icons.church, color: isEscuro ? Colors.white70 : Colors.grey.shade600),
                         filled: true,
