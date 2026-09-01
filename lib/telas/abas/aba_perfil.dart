@@ -128,18 +128,6 @@ class _AbaPerfilState extends State<AbaPerfil> {
         backgroundColor: corFundo,
         elevation: 1,
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.only(bottom: 25.0, top: 10.0),
-        child: Text(
-          "Desenvolvido por\nAvison Cirilo",
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: isEscuro ? Colors.white54 : Colors.grey,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -298,7 +286,19 @@ class _AbaPerfilState extends State<AbaPerfil> {
                 label: const Text("Sair da Conta", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 40), // Espaçamento extra antes do rodapé
+
+            // NOVO LOCAL DO RODAPÉ (Rola junto com a tela)
+            Text(
+              "Desenvolvido por\nAvison Cirilo",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isEscuro ? Colors.white54 : Colors.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 20), // Margem final para desgrudar do limite inferior
           ],
         ),
       ),
