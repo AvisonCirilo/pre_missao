@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_cast
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -278,7 +280,7 @@ class _AbaAdminState extends State<AbaAdmin> {
             const SizedBox(height: 25),
             Text("Estrutura da Igreja", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
             const SizedBox(height: 10),
-            _construirBotaoAcao("Gerenciar Alas e Ramos", "Adicionar ou renomear as unidades que aparecerão no aplicativo.", Icons.church, Colors.orange, isEscuro, () {
+            _construirBotaoAcao("Gerenciar Unidades", "Adicionar ou renomear as unidades que aparecerão no aplicativo.", Icons.church, Colors.orange, isEscuro, () {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const GestaoUnidadesTela()));
             }),
             _construirBotaoAcao("Lista Global de Jovens", "Acessar e pesquisar todos os jovens cadastrados em todas as unidades.", Icons.format_list_bulleted, Colors.green, isEscuro, () {

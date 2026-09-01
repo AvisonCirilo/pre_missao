@@ -128,6 +128,18 @@ class _AbaPerfilState extends State<AbaPerfil> {
         backgroundColor: corFundo,
         elevation: 1,
       ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.only(bottom: 25.0, top: 10.0),
+        child: Text(
+          "Desenvolvido por\nAvison Cirilo",
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isEscuro ? Colors.white54 : Colors.grey,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(

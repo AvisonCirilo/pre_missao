@@ -23,7 +23,7 @@ class _GestaoUnidadesTelaState extends State<GestaoUnidadesTela> {
   void _escutarEstacasDoBanco() {
     FirebaseFirestore.instance
         .collection('unidades')
-        .where('tipo', whereIn: ['Estaca', 'Distrito', 'Missão'])
+        .where('tipo', whereIn: ['Estaca', 'Distrito'])
         .snapshots()
         .listen((snapshot) {
           List<String> estacas = [];
@@ -41,7 +41,6 @@ class _GestaoUnidadesTelaState extends State<GestaoUnidadesTela> {
   void _mostrarFormularioUnidade({DocumentSnapshot? unidadeAtual}) {
     bool isEdicao = unidadeAtual != null;
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
-
     Map<String, dynamic>? dados = isEdicao ? unidadeAtual.data() as Map<String, dynamic> : null;
 
     final nomeCtrl = TextEditingController(text: isEdicao ? dados!['nome'] : "");
@@ -99,7 +98,7 @@ class _GestaoUnidadesTelaState extends State<GestaoUnidadesTela> {
                         fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                       ),
-                      items: ["Ala", "Ramo", "Estaca", "Distrito", "Missão"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      items: ["Ala", "Ramo", "Estaca", "Distrito"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                       onChanged: (val) {
                         setStateModal(() => tipoSelecionado = val!);
                       },
@@ -110,7 +109,7 @@ class _GestaoUnidadesTelaState extends State<GestaoUnidadesTela> {
                       controller: nomeCtrl,
                       style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
                       decoration: InputDecoration(
-                        labelText: "Nome da Ala",
+                        labelText: "Nome da Unidade",
                         labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700),
                         prefixIcon: Icon(Icons.church, color: isEscuro ? Colors.white70 : Colors.grey.shade600),
                         filled: true,
@@ -193,101 +192,109 @@ class _GestaoUnidadesTelaState extends State<GestaoUnidadesTela> {
   }
 
   // ==========================================
-  // WIDGET CONSTRUTOR DE SEÇÕES (DIVISÕES)
+  // WIDGET CONSTRUTOR EM CASCATA
   // ==========================================
-  Widget _construirSessaoUnidades(
-    String titulo,
-    List<DocumentSnapshot> unidades,
-    Color corTema,
-    IconData icone,
-    bool isEscuro,
-    Color corFundo,
-    Color corTexto
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 15, bottom: 10, left: 5),
-          child: Row(
-            children: [
-              Icon(icone, color: corTema, size: 22),
-              const SizedBox(width: 8),
-              Text(titulo, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTema)),
+  Widget _construirTileUnidade(DocumentSnapshot filha, bool isEscuro, Color corFundo, Color corTexto) {
+    Map<String, dynamic> fData = filha.data() as Map<String, dynamic>;
+    Color corTema = fData['tipo'] == 'Ala' ? Colors.orange : Colors.teal;
+    IconData icone = fData['tipo'] == 'Ala' ? Icons.church : Icons.other_houses;
+    
+    return Dismissible(
+      key: Key(filha.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.redAccent,
+        child: const Icon(Icons.delete, color: Colors.white, size: 24),
+      ),
+      confirmDismiss: (direction) async {
+        return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: corFundo,
+            title: Text("Confirmar Exclusão", style: TextStyle(color: corTexto)),
+            content: Text("Tem certeza que deseja excluir a unidade ${fData['tipo']} ${fData['nome']}?", style: TextStyle(color: corTexto)),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
+              ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), onPressed: () => Navigator.of(context).pop(true), child: const Text("Excluir")),
             ],
           ),
+        );
+      },
+      onDismissed: (direction) async {
+        await FirebaseFirestore.instance.collection('unidades').doc(filha.id).delete();
+      },
+      child: Container(
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade100))),
+        child: ListTile(
+          contentPadding: const EdgeInsets.only(left: 32, right: 16, top: 0, bottom: 0),
+          leading: Icon(icone, color: corTema, size: 20),
+          title: Text("${fData['tipo']} ${fData['nome']}", style: TextStyle(fontWeight: FontWeight.w600, color: corTexto)),
+          trailing: IconButton(
+            icon: const Icon(Icons.edit, color: Colors.grey, size: 18),
+            onPressed: () => _mostrarFormularioUnidade(unidadeAtual: filha),
+          ),
         ),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(), // Desativa rolagem interna para rolar com a tela inteira
-          itemCount: unidades.length,
-          itemBuilder: (context, index) {
-            var doc = unidades[index];
-            Map<String, dynamic> und = doc.data() as Map<String, dynamic>;
+      ),
+    );
+  }
 
-            bool isEstaca = (und['tipo'] == 'Estaca' || und['tipo'] == 'Distrito' || und['tipo'] == 'Missão');
+  Widget _construirCardEstaca(DocumentSnapshot estacaDoc, List<DocumentSnapshot> filhas, bool isEscuro, Color corFundo, Color corTexto) {
+    Map<String, dynamic> und = estacaDoc.data() as Map<String, dynamic>;
+    String nomeEstaca = "${und['tipo']} ${und['nome']}";
 
-            return Dismissible(
-              key: Key(doc.id),
-              direction: DismissDirection.endToStart,
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20),
-                decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.delete, color: Colors.white, size: 30),
-              ),
-              confirmDismiss: (direction) async {
-                return await showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    backgroundColor: corFundo,
-                    title: Text("Confirmar Exclusão", style: TextStyle(color: corTexto)),
-                    content: Text("Tem certeza que deseja excluir a unidade ${und['tipo']} ${und['nome']}?", style: TextStyle(color: corTexto)),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
-                      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), onPressed: () => Navigator.of(context).pop(true), child: const Text("Excluir")),
-                    ],
-                  ),
-                );
-              },
-              onDismissed: (direction) async {
-                await FirebaseFirestore.instance.collection('unidades').doc(doc.id).delete();
-              },
-              child: Card(
-                color: corFundo,
-                margin: const EdgeInsets.only(bottom: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200),
+    return Dismissible(
+      key: Key(estacaDoc.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(12)),
+        child: const Icon(Icons.delete, color: Colors.white, size: 30),
+      ),
+      confirmDismiss: (direction) async {
+        return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: corFundo,
+            title: Text("Confirmar Exclusão", style: TextStyle(color: corTexto)),
+            content: Text("Tem certeza que deseja excluir a unidade $nomeEstaca?\n\nAtenção: Todas as Alas e Ramos vinculadas ficarão sem referência.", style: TextStyle(color: corTexto)),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
+              ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), onPressed: () => Navigator.of(context).pop(true), child: const Text("Excluir")),
+            ],
+          ),
+        );
+      },
+      onDismissed: (direction) async {
+        await FirebaseFirestore.instance.collection('unidades').doc(estacaDoc.id).delete();
+      },
+      child: Card(
+        color: corFundo,
+        margin: const EdgeInsets.only(bottom: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)),
+        elevation: 0,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            iconColor: Colors.purple, collapsedIconColor: Colors.grey,
+            leading: CircleAvatar(backgroundColor: Colors.purple.withValues(alpha: 0.15), child: const Icon(Icons.map, color: Colors.purple)),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(nomeEstaca, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
                 ),
-                elevation: 0,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  leading: CircleAvatar(
-                    backgroundColor: corTema.withValues(alpha: 0.15),
-                    child: Icon(icone, color: corTema),
-                  ),
-                  title: Text(
-                    "${und['tipo']} ${und['nome']}",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto),
-                  ),
-                  subtitle: Text(
-                    isEstaca ? 'Região Administrativa' : 'Pertence à: ${und['estaca']}',
-                    style: TextStyle(
-                      color: isEscuro ? Colors.white54 : Colors.grey,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.grey),
-                    onPressed: () => _mostrarFormularioUnidade(unidadeAtual: doc),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.grey, size: 20),
+                  onPressed: () => _mostrarFormularioUnidade(unidadeAtual: estacaDoc),
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+            children: filhas.map((filha) => _construirTileUnidade(filha, isEscuro, corFundo, corTexto)).toList(),
+          ),
         ),
-      ],
+      ),
     );
   }
 
@@ -318,28 +325,65 @@ class _GestaoUnidadesTelaState extends State<GestaoUnidadesTela> {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.orange));
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Nenhuma unidade cadastrada.", style: TextStyle(color: Colors.grey)));
 
-          // Filtra e divide a lista em 3 categorias
-          var estacas = snapshot.data!.docs.where((d) => ['Estaca', 'Distrito', 'Missão'].contains(d['tipo'])).toList();
-          var alas = snapshot.data!.docs.where((d) => d['tipo'] == 'Ala').toList();
-          var ramos = snapshot.data!.docs.where((d) => d['tipo'] == 'Ramo').toList();
+          var todasUnidades = snapshot.data!.docs;
+          var estacas = todasUnidades.where((d) => ['Estaca', 'Distrito'].contains(d['tipo'])).toList();
+          var alasRamos = todasUnidades.where((d) => ['Ala', 'Ramo'].contains(d['tipo'])).toList();
 
-          return SingleChildScrollView(
+          // Encontrar unidades órfãs (cujo pai foi excluído ou não existe)
+          List<DocumentSnapshot> orfas = [];
+          for (var ala in alasRamos) {
+             Map<String, dynamic> data = ala.data() as Map<String, dynamic>;
+             String estacaPai = data['estaca'] ?? '';
+             bool temPai = estacas.any((e) {
+                var eData = e.data() as Map<String, dynamic>;
+                return "${eData['tipo']} ${eData['nome']}" == estacaPai;
+             });
+             if (!temPai) orfas.add(ala);
+          }
+
+          return ListView(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (estacas.isNotEmpty) 
-                  _construirSessaoUnidades("Estacas e Distritos", estacas, Colors.purple, Icons.map, isEscuro, corFundo, corTexto),
-                
-                if (alas.isNotEmpty) 
-                  _construirSessaoUnidades("Alas", alas, Colors.orange, Icons.church, isEscuro, corFundo, corTexto),
-                
-                if (ramos.isNotEmpty) 
-                  _construirSessaoUnidades("Ramos", ramos, Colors.teal, Icons.other_houses, isEscuro, corFundo, corTexto),
+            children: [
+               ...estacas.map((estaca) {
+                  Map<String, dynamic> eData = estaca.data() as Map<String, dynamic>;
+                  String nomeEstaca = "${eData['tipo']} ${eData['nome']}";
                   
-                const SizedBox(height: 80), // Espaço para não cobrir com o botão flutuante
-              ],
-            ),
+                  var filhas = alasRamos.where((d) {
+                     var dData = d.data() as Map<String, dynamic>;
+                     return dData['estaca'] == nomeEstaca;
+                  }).toList();
+
+                  return _construirCardEstaca(estaca, filhas, isEscuro, corFundo, corTexto);
+               }),
+
+               if (orfas.isNotEmpty) ...[
+                 const Padding(
+                   padding: EdgeInsets.only(top: 20, bottom: 10, left: 5),
+                   child: Text("Alas / Ramos Sem Vínculo (Órfãs)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                 ),
+                 Card(
+                   color: corFundo,
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)),
+                   elevation: 0,
+                   child: Column(
+                     children: orfas.map((orfa) {
+                        Map<String, dynamic> fData = orfa.data() as Map<String, dynamic>;
+                        return ListTile(
+                          leading: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                          title: Text("${fData['tipo']} ${fData['nome']}", style: TextStyle(color: corTexto, fontWeight: FontWeight.bold)),
+                          subtitle: Text("Estaca: ${fData['estaca']} (Não encontrada)", style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                          trailing: IconButton(
+                             icon: const Icon(Icons.edit, color: Colors.grey),
+                             onPressed: () => _mostrarFormularioUnidade(unidadeAtual: orfa),
+                          ),
+                        );
+                     }).toList(),
+                   ),
+                 )
+               ],
+
+               const SizedBox(height: 80),
+            ],
           );
         }
       ),

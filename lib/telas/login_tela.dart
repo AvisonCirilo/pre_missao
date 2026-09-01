@@ -165,6 +165,18 @@ class _LoginPageState extends State<LoginPage> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.only(bottom: 25.0, top: 10.0),
+        child: Text(
+          "Desenvolvido por\nAvison Cirilo",
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isEscuro ? Colors.white54 : Colors.grey,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

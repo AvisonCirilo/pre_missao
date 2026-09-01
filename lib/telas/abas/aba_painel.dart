@@ -1,3 +1,5 @@
+// ignore_for_file: empty_catches, curly_braces_in_flow_control_structures, deprecated_member_use, unnecessary_cast
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';

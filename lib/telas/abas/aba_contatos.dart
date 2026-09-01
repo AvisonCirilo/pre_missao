@@ -1,3 +1,5 @@
+// ignore_for_file: empty_catches, unnecessary_cast
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';

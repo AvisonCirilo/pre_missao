@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, unnecessary_non_null_assertion, unused_local_variable
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,7 +14,6 @@ class GestaoLideresTela extends StatefulWidget {
 
 class _GestaoLideresTelaState extends State<GestaoLideresTela> {
   final List<String> _opcoesCargo = ['Bispo', 'Pres. de Ramo', 'Pres. de Estaca', 'Conselho Geral', 'Admin'];
-  
   // Dicionário invisível que organiza as Alas dentro das Estacas
   Map<String, List<String>> _arvoreUnidades = {'Global (Todas)': []};
 
@@ -87,7 +88,6 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
             // Puxa apenas as estacas reais (esconde a opção "Global")
             List<String> estacasReais = _arvoreUnidades.keys.where((k) => k != 'Global (Todas)').toList();
             if (estacasReais.isEmpty) estacasReais = ['Nenhuma Estaca Cadastrada'];
-
             if (!estacasReais.contains(estacaSelecionada)) estacaSelecionada = estacasReais.first;
 
             // Puxa as alas apenas da estaca selecionada
@@ -96,7 +96,6 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
               alasReais = _arvoreUnidades[estacaSelecionada]!;
             }
             if (alasReais.isEmpty) alasReais = ['Nenhuma Ala Cadastrada'];
-
             if (!alasReais.contains(unidadeSelecionada)) unidadeSelecionada = alasReais.first;
 
             return Container(
@@ -121,8 +120,10 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
 
                     _construirCampoTexto("Nome Completo", nomeCtrl, Icons.person, isEscuro),
                     const SizedBox(height: 15),
+
                     _construirCampoTexto("Usuário de Login", usuarioCtrl, Icons.account_circle, isEscuro, enabled: !isEdicao),
                     const SizedBox(height: 15),
+
                     _construirCampoTexto(isEdicao ? "Nova Senha" : "Senha Temporária", senhaCtrl, Icons.lock, isEscuro),
                     const SizedBox(height: 15),
 
@@ -174,6 +175,7 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                     _construirCampoTexto("WhatsApp do Líder", whatsappCtrl, Icons.phone, isEscuro, tipo: TextInputType.phone),
                     
                     const SizedBox(height: 30),
+
                     SizedBox(
                       width: double.infinity, height: 50,
                       child: ElevatedButton.icon(
@@ -204,7 +206,6 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                           }
                           
                           setStateModal(() => salvando = true);
-
                           try {
                             String nivelAcessoCalc = _obterNivelAcesso(cargoSelecionado);
                             String usuarioLimpo = usuarioCtrl.text.trim().replaceAll(' ', '').toLowerCase();
@@ -217,13 +218,14 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                               'whatsapp': whatsappCtrl.text.trim(),
                               'cargo': cargoSelecionado,
                               'nivel_acesso': nivelAcessoCalc,
-                              'estaca': estacaFinal, 
-                              'unidade': unidadeFinal, 
+                              'estaca': estacaFinal,
+                               'unidade': unidadeFinal, 
                             };
 
                             if (isEdicao) {
                               if (senhaCtrl.text.trim().isNotEmpty) {
                                 if (senhaCtrl.text.trim().length < 6) throw Exception("Mínimo de 6 caracteres.");
+                                
                                 String? senhaAntigaSistema = dados!['senha_sistema'];
                                 String emailDoLider = dados['email'] ?? emailAuthFantasma;
 
@@ -253,6 +255,7 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
                               
                               await FirebaseFirestore.instance.collection('usuarios').doc(novoUid).set(dadosFinais);
                             }
+
                             if (context.mounted) Navigator.pop(context);
                           } catch (e) {
                             setStateModal(() => salvando = false);
@@ -281,6 +284,67 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
     );
   }
 
+  // ==========================================
+  // WIDGET CONSTRUTOR DE ITENS INDIVIDUAIS
+  // ==========================================
+  Widget _construirItemLider(DocumentSnapshot doc, bool isEscuro, Color corFundo, Color corTexto) {
+    Map<String, dynamic> lider = doc.data() as Map<String, dynamic>;
+    String nome = lider['nome'] ?? 'Sem Nome';
+    String cargo = lider['cargo'] ?? 'Desconhecido';
+    String unidade = lider['unidade'] ?? 'Desconhecida';
+    String usuarioLogin = lider['usuario'] ?? 'Sem Usuário';
+
+    bool isConselho = cargo.contains('Conselho');
+    bool isEstaca = cargo.contains('Estaca');
+    bool isAdmin = cargo.contains('Admin');
+
+    Color corAvatar = isConselho ? Colors.teal : (isEstaca ? Colors.purple : (isAdmin ? Colors.green : Colors.blue));
+    IconData iconeAvatar = isConselho ? Icons.domain : (isEstaca ? Icons.admin_panel_settings : (isAdmin ? Icons.security : Icons.person));
+
+    return Dismissible(
+      key: Key(doc.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.redAccent,
+        child: const Icon(Icons.delete, color: Colors.white, size: 24),
+      ),
+      confirmDismiss: (direction) async {
+        return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: corFundo,
+            title: Text("Confirmar Exclusão", style: TextStyle(color: corTexto)),
+            content: Text("Tem certeza que deseja remover o acesso de $nome?", style: TextStyle(color: corTexto)),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
+              ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), onPressed: () => Navigator.of(context).pop(true), child: const Text("Apagar")),
+            ],
+          ),
+        );
+      },
+      onDismissed: (direction) async {
+        await FirebaseFirestore.instance.collection('usuarios').doc(doc.id).delete();
+      },
+      child: Container(
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade100))),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          leading: CircleAvatar(backgroundColor: corAvatar.withValues(alpha: 0.15), child: Icon(iconeAvatar, color: corAvatar)),
+          title: Text(nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SizedBox(height: 4),
+            Text("$cargo • $unidade", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 4),
+            Row(children: [const Icon(Icons.account_circle, size: 14, color: Colors.grey), const SizedBox(width: 4), Text(usuarioLogin, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))])
+          ]),
+          trailing: IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: () => _mostrarFormularioLider(liderAtual: doc)),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
@@ -297,61 +361,106 @@ class _GestaoLideresTelaState extends State<GestaoLideresTela> {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Nenhum líder cadastrado.", style: TextStyle(color: Colors.grey)));
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: snapshot.data!.docs.length,
-            itemBuilder: (context, index) {
-              var doc = snapshot.data!.docs[index];
-              Map<String, dynamic> lider = doc.data() as Map<String, dynamic>;
-              
-              String nome = lider['nome'] ?? 'Sem Nome';
-              String cargo = lider['cargo'] ?? 'Desconhecido';
-              String unidade = lider['unidade'] ?? 'Desconhecida';
-              String usuarioLogin = lider['usuario'] ?? 'Sem Usuário';
-              
-              bool isConselho = cargo.contains('Conselho');
-              bool isEstaca = cargo.contains('Estaca');
-              bool isAdmin = cargo.contains('Admin');
-              
-              Color corAvatar = isConselho ? Colors.teal : (isEstaca ? Colors.purple : (isAdmin ? Colors.green : Colors.blue));
-              IconData iconeAvatar = isConselho ? Icons.domain : (isEstaca ? Icons.admin_panel_settings : (isAdmin ? Icons.security : Icons.person));
+          // Organizando a árvore de hierarquia
+          List<DocumentSnapshot> admins = [];
+          List<DocumentSnapshot> conselhoGeral = [];
+          Map<String, Map<String, List<DocumentSnapshot>>> arvoreEstacas = {};
 
-              return Dismissible(
-                key: Key(doc.id), 
-                direction: DismissDirection.endToStart, 
-                background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.delete, color: Colors.white, size: 30)),
-                confirmDismiss: (direction) async {
-                  return await showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: corFundo, title: Text("Confirmar Exclusão", style: TextStyle(color: corTexto)), content: Text("Tem certeza que deseja remover o acesso de $nome?", style: TextStyle(color: corTexto)),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
-                        ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white), onPressed: () => Navigator.of(context).pop(true), child: const Text("Apagar")),
-                      ],
-                    ),
+          for (var doc in snapshot.data!.docs) {
+             var lider = doc.data() as Map<String, dynamic>;
+             String cargo = lider['cargo'] ?? '';
+             String estaca = lider['estaca'] ?? 'Global';
+             String unidade = lider['unidade'] ?? 'Global';
+
+             if (cargo == 'Admin') {
+               admins.add(doc);
+             } else if (cargo == 'Conselho Geral') {
+               conselhoGeral.add(doc);
+             } else {
+               arvoreEstacas.putIfAbsent(estaca, () => {});
+               arvoreEstacas[estaca]!.putIfAbsent(unidade, () => []).add(doc);
+             }
+          }
+
+          List<String> estacasOrdenadas = arvoreEstacas.keys.toList()..sort();
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+               
+               // 1. ADMINS
+               if (admins.isNotEmpty)
+                 Card(
+                    color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
+                    child: Theme(
+                       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                       child: ExpansionTile(
+                          initiallyExpanded: true, iconColor: Colors.redAccent, collapsedIconColor: Colors.grey,
+                          leading: CircleAvatar(backgroundColor: Colors.redAccent.withValues(alpha: 0.15), child: const Icon(Icons.security, color: Colors.redAccent)),
+                          title: Text("Administração", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+                          children: admins.map((doc) => _construirItemLider(doc, isEscuro, corFundo, corTexto)).toList(),
+                       )
+                    )
+                 ),
+               
+               // 2. CONSELHO GERAL
+               if (conselhoGeral.isNotEmpty)
+                 Card(
+                    color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
+                    child: Theme(
+                       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                       child: ExpansionTile(
+                          initiallyExpanded: true, iconColor: Colors.blue.shade700, collapsedIconColor: Colors.grey,
+                          leading: CircleAvatar(backgroundColor: Colors.blue.shade700.withValues(alpha: 0.15), child: Icon(Icons.verified_user, color: Colors.blue.shade700)),
+                          title: Text("Conselho Geral", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+                          children: conselhoGeral.map((doc) => _construirItemLider(doc, isEscuro, corFundo, corTexto)).toList(),
+                       )
+                    )
+                 ),
+               
+               // 3. ESTACAS > ALAS
+               ...estacasOrdenadas.map((estaca) {
+                  var alasMap = arvoreEstacas[estaca]!;
+                  List<DocumentSnapshot> lideresEstaca = alasMap['Todas as Alas'] ?? alasMap['Global (Todas)'] ?? alasMap['Nenhuma Ala Cadastrada'] ?? [];
+                  
+                  // Colecionar alas agrupadas para hierarquia de Bispos e Ramos
+                  List<String> nomesAlas = alasMap.keys.where((k) => k != 'Todas as Alas' && k != 'Global (Todas)' && k != 'Nenhuma Ala Cadastrada').toList()..sort();
+
+                  if (lideresEstaca.isEmpty && nomesAlas.isEmpty) return const SizedBox.shrink();
+
+                  return Card(
+                     color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
+                     child: Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                           iconColor: Colors.purple, collapsedIconColor: Colors.grey,
+                           leading: CircleAvatar(backgroundColor: Colors.purple.withValues(alpha: 0.15), child: const Icon(Icons.map, color: Colors.purple)),
+                           title: Text(estaca, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
+                           children: [
+                              // Presidência da Estaca
+                              if (lideresEstaca.isNotEmpty)
+                                 ...lideresEstaca.map((doc) => _construirItemLider(doc, isEscuro, corFundo, corTexto)),
+                              
+                              // Alas aninhadas dentro da Estaca
+                              ...nomesAlas.map((ala) {
+                                 return Padding(
+                                    padding: const EdgeInsets.only(left: 16),
+                                    child: ExpansionTile(
+                                       iconColor: Colors.orange, collapsedIconColor: Colors.grey,
+                                       leading: const Icon(Icons.church, color: Colors.orange),
+                                       title: Text(ala, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: corTexto)),
+                                       children: alasMap[ala]!.map((doc) => _construirItemLider(doc, isEscuro, corFundo, corTexto)).toList(),
+                                    )
+                                 );
+                              })
+                           ]
+                        )
+                     )
                   );
-                },
-                onDismissed: (direction) async {
-                  await FirebaseFirestore.instance.collection('usuarios').doc(doc.id).delete();
-                },
-                child: Card(
-                  color: corFundo, margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)), elevation: 0,
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    leading: CircleAvatar(backgroundColor: corAvatar.withValues(alpha: 0.15), child: Icon(iconeAvatar, color: corAvatar)),
-                    title: Text(nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
-                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const SizedBox(height: 4), 
-                      Text("$cargo • $unidade", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w500)), 
-                      const SizedBox(height: 4), 
-                      Row(children: [const Icon(Icons.account_circle, size: 14, color: Colors.grey), const SizedBox(width: 4), Text(usuarioLogin, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))])
-                    ]),
-                    trailing: IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: () => _mostrarFormularioLider(liderAtual: doc)),
-                  ),
-                ),
-              );
-            },
+               }),
+
+               const SizedBox(height: 80),
+            ]
           );
         }
       ),

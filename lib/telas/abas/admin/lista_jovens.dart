@@ -1,4 +1,4 @@
-// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
+// ignore_for_file: unnecessary_cast, unused_field, unused_import, curly_braces_in_flow_control_structures, deprecated_member_use
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
