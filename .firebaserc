@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "192b0"
+  },
+  "targets": {
+    "id-do-seu-projeto": {
+      "hosting": {
+        "meuchamado": [ 
+          "meuchamado"  
+        ]
+      }
+    }
+  }
+}
