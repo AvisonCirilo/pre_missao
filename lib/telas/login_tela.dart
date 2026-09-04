@@ -429,9 +429,6 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ],
             )
-          // ==========================================
-          // LAYOUT PARA CELULAR (Formulário centralizado)
-          // ==========================================
           : SafeArea(child: _construirFormularioLogin(context, isDesktop: false)),
     );
   }
