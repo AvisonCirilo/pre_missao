@@ -400,6 +400,7 @@ class _LoginPageState extends State<LoginPage> {
       body: isDesktop
           // ==========================================
           // LAYOUT PARA PC (Duas colunas)
+          // ==========================================
           ? Row(
               children: [
                 Expanded(flex: 4, child: _construirPainelApresentacao(context)),
@@ -428,6 +429,9 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ],
             )
+          // ==========================================
+          // LAYOUT PARA CELULAR (Formulário centralizado)
+          // ==========================================
           : SafeArea(child: _construirFormularioLogin(context, isDesktop: false)),
     );
   }
