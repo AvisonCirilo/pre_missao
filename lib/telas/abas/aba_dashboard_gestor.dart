@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'dashboard_list.dart';
 
 class AbaDashboardGestor extends StatefulWidget {
   const AbaDashboardGestor({super.key});
@@ -12,8 +13,6 @@ class AbaDashboardGestor extends StatefulWidget {
 class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
   int _indiceTocadoStatus = -1;
   int _indiceTocadoGenero = -1;
-  
-  // 1. Variável para segurar a conexão do banco de dados sem recriar toda hora
   Stream<QuerySnapshot>? _streamJovens;
 
   @override
@@ -22,32 +21,43 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
     _iniciarConexaoBanco();
   }
 
-  // Inicia a conexão com o Firebase apenas uma vez
   void _iniciarConexaoBanco() {
     _streamJovens = FirebaseFirestore.instance.collection('jovens').snapshots();
   }
 
-  // 2. Função de Puxar para Atualizar (Pull-to-Refresh)
   Future<void> _atualizarAoPuxar() async {
     setState(() {
-      _iniciarConexaoBanco(); // Força uma nova busca no servidor
+      _iniciarConexaoBanco();
     });
-    // Dá um tempo de 1 segundo para a animação de recarregamento ficar fluida
-    await Future.delayed(const Duration(seconds: 1)); 
+    await Future.delayed(const Duration(seconds: 1));
   }
 
-  Widget _construirCartaoDashboard(String titulo, String valor, Color cor, IconData icone, bool isEscuro) {
+  Widget _construirCartaoDashboard(String titulo, String valor, Color cor, IconData icone, bool isEscuro, VoidCallback onTap) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200), boxShadow: [BoxShadow(color: cor.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))]),
-        child: Column(
-          children: [
-            Icon(icone, color: cor, size: 28), const SizedBox(height: 8),
-            Text(valor, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
-            const SizedBox(height: 4),
-            Text(titulo, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
-          ],
+        decoration: BoxDecoration(
+          color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, 
+          borderRadius: BorderRadius.circular(16), 
+          border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200), 
+          boxShadow: [BoxShadow(color: cor.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))]
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+              child: Column(
+                children: [
+                  Icon(icone, color: cor, size: 28), const SizedBox(height: 8),
+                  Text(valor, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
+                  const SizedBox(height: 4),
+                  Text(titulo, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -64,26 +74,26 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
             Text(titulo, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isEscuro ? Colors.white : Colors.black87)),
             const SizedBox(height: 10),
             Expanded(
-              child: secoes.isEmpty 
-                ? const Center(child: Text("Sem dados", style: TextStyle(color: Colors.grey)))
-                : PieChart(
-                    PieChartData(
-                      sectionsSpace: 2, centerSpaceRadius: 25, sections: secoes,
-                      pieTouchData: PieTouchData(
-                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                          setState(() {
-                            if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
-                              if (titulo.contains("Status")) _indiceTocadoStatus = -1;
-                              if (titulo.contains("Gênero")) _indiceTocadoGenero = -1;
-                              return;
-                            }
-                            if (titulo.contains("Status")) _indiceTocadoStatus = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                            if (titulo.contains("Gênero")) _indiceTocadoGenero = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                          });
-                        },
+              child: secoes.isEmpty
+                  ? const Center(child: Text("Sem dados", style: TextStyle(color: Colors.grey)))
+                  : PieChart(
+                      PieChartData(
+                        sectionsSpace: 2, centerSpaceRadius: 25, sections: secoes,
+                        pieTouchData: PieTouchData(
+                          touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                            setState(() {
+                              if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                                if (titulo.contains("Status")) _indiceTocadoStatus = -1;
+                                if (titulo.contains("Gênero")) _indiceTocadoGenero = -1;
+                                return;
+                              }
+                              if (titulo.contains("Status")) _indiceTocadoStatus = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                              if (titulo.contains("Gênero")) _indiceTocadoGenero = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                            });
+                          },
+                        ),
                       ),
                     ),
-                  ),
             ),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: legendas),
@@ -114,20 +124,21 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
       appBar: AppBar(automaticallyImplyLeading: false, title: Text('Painel Analítico', style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)), backgroundColor: corFundo, elevation: 1),
       
       body: StreamBuilder<QuerySnapshot>(
-        stream: _streamJovens, // Usa a variável estabilizada
+        stream: _streamJovens, 
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.teal));
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Sistema vazio.", style: TextStyle(color: Colors.grey)));
 
           List<Map<String, dynamic>> todosJovens = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
 
-          int totalPerspectiva = todosJovens.where((j) => j['status'] == 'Perspectiva').length;
+          int totalPerspectiva = todosJovens.where((j) => j['status'] == 'Perspectiva' || j['status'] == 'Indeciso').length;
           int totalPreparacao = todosJovens.where((j) => j['status'] == 'Preparação').length;
           int totalEnviados = todosJovens.where((j) => j['status'] == 'Enviado').length;
 
-          // Calcula Jovens Parados (> 30 dias sem atualização)
           int totalParados = todosJovens.where((j) {
-            if (j['status'] == 'Enviado' || j['ultima_atualizacao'] == null) return false;
+            if (j['status'] == 'Enviado') return false;
+            if (j['status'] == 'Indeciso') return true;
+            if (j['ultima_atualizacao'] == null) return false;
             int dias = DateTime.now().difference((j['ultima_atualizacao'] as Timestamp).toDate()).inDays;
             return dias > 30;
           }).length;
@@ -135,13 +146,11 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
           int totalRapazes = todosJovens.where((j) => j['sexo'] == 'Masculino').length;
           int totalMocas = todosJovens.where((j) => j['sexo'] == 'Feminino').length;
 
-          // 3. Aplica o RefreshIndicator em volta de todo o conteúdo rolável
           return RefreshIndicator(
             onRefresh: _atualizarAoPuxar,
             color: Colors.teal,
             backgroundColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
             child: SingleChildScrollView(
-              // Essa física permite puxar a tela mesmo se não houver rolagem o suficiente
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -149,17 +158,25 @@ class _AbaDashboardGestorState extends State<AbaDashboardGestor> {
                 children: [
                   Row(
                     children: [
-                      _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro),
+                      _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardList(titulo: "Jovens em Perspectiva", statusFiltro: "Perspectiva")));
+                      }),
                       const SizedBox(width: 10),
-                      _construirCartaoDashboard("Preparação", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro),
+                      _construirCartaoDashboard("Preparação", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardList(titulo: "Jovens em Preparação", statusFiltro: "Preparação")));
+                      }),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.flight_takeoff, isEscuro),
+                      _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.flight_takeoff, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardList(titulo: "Jovens Enviados", statusFiltro: "Enviado")));
+                      }),
                       const SizedBox(width: 10),
-                      _construirCartaoDashboard("Estagnados", totalParados.toString(), Colors.redAccent, Icons.warning_amber_rounded, isEscuro),
+                      _construirCartaoDashboard("Estagnados", totalParados.toString(), Colors.redAccent, Icons.warning_amber_rounded, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const DashboardList(titulo: "Fichas Estagnadas", isEstagnado: true)));
+                      }),
                     ],
                   ),
                   const SizedBox(height: 25),

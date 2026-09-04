@@ -1,10 +1,10 @@
 // ignore_for_file: unnecessary_cast
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'dashboard_list.dart';
 
 class AbaDashboardEstaca extends StatefulWidget {
   const AbaDashboardEstaca({super.key});
@@ -16,7 +16,6 @@ class AbaDashboardEstaca extends StatefulWidget {
 class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
   String _minhaEstaca = "";
   bool _carregandoPerfil = true;
-  
   Stream<QuerySnapshot>? _streamJovens;
 
   int _indiceTocadoStatus = -1;
@@ -57,21 +56,35 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
 
   Future<void> _atualizarAoPuxar() async {
     setState(() => _iniciarConexaoBanco());
-    await Future.delayed(const Duration(seconds: 1)); 
+    await Future.delayed(const Duration(seconds: 1));
   }
 
-  Widget _construirCartaoDashboard(String titulo, String valor, Color cor, IconData icone, bool isEscuro) {
+  Widget _construirCartaoDashboard(String titulo, String valor, Color cor, IconData icone, bool isEscuro, VoidCallback onTap) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200), boxShadow: [BoxShadow(color: cor.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))]),
-        child: Column(
-          children: [
-            Icon(icone, color: cor, size: 28), const SizedBox(height: 8),
-            Text(valor, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
-            const SizedBox(height: 4),
-            Text(titulo, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
-          ],
+        decoration: BoxDecoration(
+          color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, 
+          borderRadius: BorderRadius.circular(16), 
+          border: Border.all(color: isEscuro ? Colors.white12 : Colors.grey.shade200), 
+          boxShadow: [BoxShadow(color: cor.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))]
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+              child: Column(
+                children: [
+                  Icon(icone, color: cor, size: 28), const SizedBox(height: 8),
+                  Text(valor, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
+                  const SizedBox(height: 4),
+                  Text(titulo, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -88,26 +101,26 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
             Text(titulo, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isEscuro ? Colors.white : Colors.black87)),
             const SizedBox(height: 10),
             Expanded(
-              child: secoes.isEmpty 
-                ? const Center(child: Text("Sem dados", style: TextStyle(color: Colors.grey)))
-                : PieChart(
-                    PieChartData(
-                      sectionsSpace: 2, centerSpaceRadius: 25, sections: secoes,
-                      pieTouchData: PieTouchData(
-                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                          setState(() {
-                            if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
-                              if (titulo.contains("Status")) _indiceTocadoStatus = -1;
-                              if (titulo.contains("Gênero")) _indiceTocadoGenero = -1;
-                              return;
-                            }
-                            if (titulo.contains("Status")) _indiceTocadoStatus = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                            if (titulo.contains("Gênero")) _indiceTocadoGenero = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                          });
-                        },
+              child: secoes.isEmpty
+                  ? const Center(child: Text("Sem dados", style: TextStyle(color: Colors.grey)))
+                  : PieChart(
+                      PieChartData(
+                        sectionsSpace: 2, centerSpaceRadius: 25, sections: secoes,
+                        pieTouchData: PieTouchData(
+                          touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                            setState(() {
+                              if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                                if (titulo.contains("Status")) _indiceTocadoStatus = -1;
+                                if (titulo.contains("Gênero")) _indiceTocadoGenero = -1;
+                                return;
+                              }
+                              if (titulo.contains("Status")) _indiceTocadoStatus = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                              if (titulo.contains("Gênero")) _indiceTocadoGenero = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                            });
+                          },
+                        ),
                       ),
                     ),
-                  ),
             ),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: legendas),
@@ -153,13 +166,14 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
 
           List<Map<String, dynamic>> todosJovens = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
 
-          int totalPerspectiva = todosJovens.where((j) => j['status'] == 'Perspectiva').length;
+          int totalPerspectiva = todosJovens.where((j) => j['status'] == 'Perspectiva' || j['status'] == 'Indeciso').length;
           int totalPreparacao = todosJovens.where((j) => j['status'] == 'Preparação').length;
           int totalEnviados = todosJovens.where((j) => j['status'] == 'Enviado').length;
 
-          // Calcula Jovens Parados (> 30 dias sem atualização)
           int totalParados = todosJovens.where((j) {
-            if (j['status'] == 'Enviado' || j['ultima_atualizacao'] == null) return false;
+            if (j['status'] == 'Enviado') return false;
+            if (j['status'] == 'Indeciso') return true;
+            if (j['ultima_atualizacao'] == null) return false;
             int dias = DateTime.now().difference((j['ultima_atualizacao'] as Timestamp).toDate()).inDays;
             return dias > 30;
           }).length;
@@ -179,17 +193,25 @@ class _AbaDashboardEstacaState extends State<AbaDashboardEstaca> {
                 children: [
                   Row(
                     children: [
-                      _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro),
+                      _construirCartaoDashboard("Perspectiva", totalPerspectiva.toString(), Colors.orange, Icons.radar, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardList(titulo: "Jovens em Perspectiva", statusFiltro: "Perspectiva", minhaEstaca: _minhaEstaca)));
+                      }),
                       const SizedBox(width: 10),
-                      _construirCartaoDashboard("Preparação", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro),
+                      _construirCartaoDashboard("Preparação", totalPreparacao.toString(), Colors.blue, Icons.assignment_ind, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardList(titulo: "Jovens em Preparação", statusFiltro: "Preparação", minhaEstaca: _minhaEstaca)));
+                      }),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.flight_takeoff, isEscuro),
+                      _construirCartaoDashboard("Enviados", totalEnviados.toString(), Colors.green, Icons.flight_takeoff, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardList(titulo: "Jovens Enviados", statusFiltro: "Enviado", minhaEstaca: _minhaEstaca)));
+                      }),
                       const SizedBox(width: 10),
-                      _construirCartaoDashboard("Estagnados", totalParados.toString(), Colors.redAccent, Icons.warning_amber_rounded, isEscuro),
+                      _construirCartaoDashboard("Estagnados", totalParados.toString(), Colors.redAccent, Icons.warning_amber_rounded, isEscuro, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardList(titulo: "Fichas Estagnadas", isEstagnado: true, minhaEstaca: _minhaEstaca)));
+                      }),
                     ],
                   ),
                   const SizedBox(height: 25),
