@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 class DashboardList extends StatefulWidget {
   final String titulo;
   final String statusFiltro;
+  final String etapaFiltro;
   final bool isEstagnado;
   final String minhaEstaca;
   final String minhaUnidade;
@@ -13,6 +14,7 @@ class DashboardList extends StatefulWidget {
     super.key,
     required this.titulo,
     this.statusFiltro = '',
+    this.etapaFiltro = '',
     this.isEstagnado = false,
     this.minhaEstaca = '',
     this.minhaUnidade = '',
@@ -79,16 +81,6 @@ class _DashboardListState extends State<DashboardList> {
     try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch (e) {}
   }
 
-  Future<void> _chamarNoWhatsApp(String nome, String telefone, List<dynamic> etapas, List<String> listaEtapas) async {
-    String numeroLimpo = telefone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (numeroLimpo.isEmpty) return;
-    int indexPendente = etapas.indexOf(false);
-    String nomeEtapaPendente = indexPendente != -1 && indexPendente < listaEtapas.length ? listaEtapas[indexPendente] : "Concluiu tudo";
-    String mensagem = "Olá, $nome! Tudo bem? Vi aqui que a sua próxima etapa é: *$nomeEtapaPendente*. Precisa de alguma ajuda com isso?";
-    final Uri url = Uri.parse('https://wa.me/$numeroLimpo?text=${Uri.encodeComponent(mensagem)}');
-    try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch (e) {}
-  }
-
   void _mostrarOpcoesEntrevista(Map<String, dynamic> jovem) {
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     showDialog(
@@ -106,7 +98,7 @@ class _DashboardListState extends State<DashboardList> {
                 'status': 'Indeciso',
                 'ultima_atualizacao': FieldValue.serverTimestamp(),
               });
-              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marcado como indeciso. Movido para estagnados.'), backgroundColor: Colors.orange));
+              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marcado como indeciso.'), backgroundColor: Colors.orange));
             },
             child: const Text("Não decidiu", style: TextStyle(color: Colors.redAccent)),
           ),
@@ -133,7 +125,7 @@ class _DashboardListState extends State<DashboardList> {
               });
               
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jovem em Preparação!'), backgroundColor: Colors.green));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jovem em processo!'), backgroundColor: Colors.green));
                 _abrirPainelDoJovem(jovem);
               }
             },
@@ -153,6 +145,9 @@ class _DashboardListState extends State<DashboardList> {
     
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     TextEditingController notaCtrl = TextEditingController();
+
+    bool temMentor = jovem['tem_mentor'] == true;
+    String mentorNome = jovem['mentor_nome'] ?? '';
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
@@ -180,8 +175,39 @@ class _DashboardListState extends State<DashboardList> {
                         children: [
                           Text(jovem['nome'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black), overflow: TextOverflow.ellipsis),
                           Text("${jovem['idade']} anos • ${jovem['unidade']}", style: const TextStyle(color: Colors.grey)),
+                          if (temMentor && mentorNome.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text("Mentor(a): $mentorNome", style: const TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
                         ],
                       ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (contextDialog) => AlertDialog(
+                            backgroundColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
+                            title: Text("Excluir Jovem", style: TextStyle(color: isEscuro ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                            content: Text("Tem certeza que deseja excluir ${jovem['nome']} permanentemente?", style: const TextStyle(color: Colors.grey)),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(contextDialog), child: const Text("Cancelar", style: TextStyle(color: Colors.grey))),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                                onPressed: () async {
+                                  Navigator.pop(contextDialog);
+                                  Navigator.pop(context);
+                                  await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).delete();
+                                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jovem excluído!'), backgroundColor: Colors.green));
+                                },
+                                child: const Text("Excluir"),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                     Stack(
                       alignment: Alignment.center,
@@ -243,10 +269,9 @@ class _DashboardListState extends State<DashboardList> {
                                       } else if (novoStatus == 'Finalizado' && (jovem['status'] != 'Finalizado' && jovem['status'] != 'Enviado')) {
                                         if (context.mounted) {
                                           Navigator.pop(context);
-                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processo Finalizado com sucesso!'), backgroundColor: Colors.green));
+                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processo Finalizado!'), backgroundColor: Colors.green));
                                         }
                                       }
-
                                       jovem['status'] = novoStatus;
                                       jovem['etapas'] = etapasTemp;
                                     },
@@ -286,7 +311,6 @@ class _DashboardListState extends State<DashboardList> {
                                       CircleAvatar(backgroundColor: Colors.blue, child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 18), onPressed: () async {
                                         if(notaCtrl.text.trim().isEmpty) return;
                                         var novaNota = {'data': "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}", 'autor': 'Anotação Dashboard', 'texto': notaCtrl.text.trim()};
-                                        
                                         setStateModal(() {
                                           notas.add(novaNota);
                                           notaCtrl.clear();
@@ -313,7 +337,14 @@ class _DashboardListState extends State<DashboardList> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: () => _chamarNoWhatsApp(jovem['nome'], jovem['telefone'], etapasTemp, listaEtapas), 
+                    onPressed: () {
+                      String numeroLimpo = (jovem['telefone'] ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+                      if (numeroLimpo.isEmpty) return;
+                      int indexPendente = etapasTemp.indexOf(false);
+                      String nomeEtapaPendente = indexPendente != -1 && indexPendente < listaEtapas.length ? listaEtapas[indexPendente] : "Enviou tudo";
+                      String mensagem = "Olá, ${jovem['nome']}! Tudo bem? Vi aqui que a sua próxima etapa é: *$nomeEtapaPendente*. Precisa de alguma ajuda com isso?";
+                      launchUrl(Uri.parse('https://wa.me/$numeroLimpo?text=${Uri.encodeComponent(mensagem)}'), mode: LaunchMode.externalApplication);
+                    },
                     icon: const Icon(Icons.chat, color: Colors.white), 
                     label: const Text("Chamar no WhatsApp", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), 
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(vertical: 14))
@@ -340,7 +371,7 @@ class _DashboardListState extends State<DashboardList> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(widget.titulo, style: TextStyle(fontWeight: FontWeight.bold, color: corTexto)),
+        title: Text(widget.titulo, style: TextStyle(fontWeight: FontWeight.bold, color: corTexto, fontSize: 18)),
         backgroundColor: corFundo,
         elevation: 1,
         iconTheme: IconThemeData(color: corTexto),
@@ -373,14 +404,23 @@ class _DashboardListState extends State<DashboardList> {
               int dias = DateTime.now().difference((jovem['ultima_atualizacao'] as Timestamp).toDate()).inDays;
               return dias > 30;
             }
-            if (widget.statusFiltro == 'Perspectiva') {
-              return jovem['status'] == 'Perspectiva' || jovem['status'] == 'Indeciso';
-            }
-            if (widget.statusFiltro == 'Finalizado') {
-              return jovem['status'] == 'Finalizado' || jovem['status'] == 'Enviado';
-            }
-            if (widget.statusFiltro.isNotEmpty) {
-              return jovem['status'] == widget.statusFiltro;
+            
+            // NOVO: Filtrar por uma Etapa específica do Gráfico
+            if (widget.etapaFiltro.isNotEmpty) {
+              if (jovem['status'] != 'Preparação') return false;
+              Map<String, dynamic> statusGeral = _obterStatusAtual(jovem['etapas'] ?? [], jovem['sexo'], jovem['status'] ?? '', widget.isEstagnado);
+              if (statusGeral['texto'] != widget.etapaFiltro) return false;
+            } else {
+              // Comportamentos Padrões
+              if (widget.statusFiltro == 'Perspectiva') {
+                return jovem['status'] == 'Perspectiva' || jovem['status'] == 'Indeciso';
+              }
+              if (widget.statusFiltro == 'Finalizado') {
+                return jovem['status'] == 'Finalizado' || jovem['status'] == 'Enviado';
+              }
+              if (widget.statusFiltro.isNotEmpty) {
+                return jovem['status'] == widget.statusFiltro;
+              }
             }
             return true;
           }).toList();
@@ -404,11 +444,8 @@ class _DashboardListState extends State<DashboardList> {
               decoration: BoxDecoration(border: Border(top: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade100))),
               child: ListTile(
                 onTap: () {
-                  if (isPerspectiva) {
-                    _mostrarOpcoesEntrevista(jovem);
-                  } else {
-                    _abrirPainelDoJovem(jovem);
-                  }
+                  if (isPerspectiva) _mostrarOpcoesEntrevista(jovem);
+                  else _abrirPainelDoJovem(jovem);
                 },
                 contentPadding: const EdgeInsets.only(left: 32, right: 16),
                 leading: CircleAvatar(
@@ -435,7 +472,8 @@ class _DashboardListState extends State<DashboardList> {
             );
           }
 
-          if (widget.statusFiltro == 'Preparação') {
+          // Se for "Preparação" GLOBAL (Sem filtro específico de etapa clicada no gráfico) -> Monta Kanban
+          if (widget.statusFiltro == 'Preparação' && widget.etapaFiltro.isEmpty) {
             Map<String, List<Map<String, dynamic>>> agrupamentoEtapas = {};
             for (var j in jovensFiltrados) {
               Map<String, dynamic> statusGeral = _obterStatusAtual(j['etapas'] ?? [], j['sexo'], j['status'], widget.isEstagnado);
@@ -472,6 +510,7 @@ class _DashboardListState extends State<DashboardList> {
             );
           } 
           else {
+            // Outras situações (Perspectiva, Finalizado, ou Uma Etapa Específica Clicada no Gráfico)
             if (isVisaoBispo) {
               return ListView(
                 padding: const EdgeInsets.all(16),
@@ -486,6 +525,7 @@ class _DashboardListState extends State<DashboardList> {
                 }).toList(),
               );
             } else {
+              // Estaca/Gestor: Árvore Estaca -> Ala
               Map<String, Map<String, List<Map<String, dynamic>>>> arvore = {};
               for (var jovem in jovensFiltrados) {
                 String estaca = jovem['estaca'] ?? 'Estaca Desconhecida';

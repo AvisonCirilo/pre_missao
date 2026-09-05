@@ -23,7 +23,6 @@ class _ChamadosEnviadosTelaState extends State<ChamadosEnviadosTela> {
     _carregarPerfilLider();
   }
 
-  // Descobre quem está logado para filtrar a lista corretamente
   Future<void> _carregarPerfilLider() async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
@@ -48,7 +47,6 @@ class _ChamadosEnviadosTelaState extends State<ChamadosEnviadosTela> {
     }
   }
 
-  // Formulário rápido para atualizar a data e o local da missão
   void _atualizarDestinoJovem(Map<String, dynamic> jovem) {
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     
@@ -57,70 +55,77 @@ class _ChamadosEnviadosTelaState extends State<ChamadosEnviadosTela> {
     
     bool salvando = false;
 
+    // DICA: No desktop, modais ficam muito esticados se não limitarmos a largura.
+    // Envolvemos o BottomSheet em um construtor de layout para não ficar exagerado
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(builder: (context, setStateModal) {
-          return Container(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
-            decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(width: 40, height: 4, decoration: BoxDecoration(color: isEscuro ? Colors.white24 : Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+          return Center( // Centraliza o modal para o desktop
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500), // Largura máxima do modal
+              child: Container(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+                decoration: BoxDecoration(color: isEscuro ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.flight_takeoff, color: Colors.green),
-                      const SizedBox(width: 10),
-                      Text("Atualizar Chamado", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
+                      Container(width: 40, height: 4, decoration: BoxDecoration(color: isEscuro ? Colors.white24 : Colors.grey.shade400, borderRadius: BorderRadius.circular(10))),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.flight_takeoff, color: Colors.green),
+                          const SizedBox(width: 10),
+                          Text("Atualizar Chamado", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black)),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(jovem['nome'], style: const TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 25),
+                      
+                      TextField(
+                        controller: destinoCtrl, 
+                        style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                        decoration: InputDecoration(labelText: "Destino da Missão", hintText: "Ex: Brasil São Paulo Sul", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.public, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                      ),
+                      const SizedBox(height: 15),
+                      
+                      TextField(
+                        controller: dataCtrl, 
+                        style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
+                        decoration: InputDecoration(labelText: "Data de Envio/Abertura", hintText: "Ex: 15/08/2026", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.calendar_today, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+                      ),
+                      
+                      const SizedBox(height: 30),
+                      
+                      SizedBox(
+                        width: double.infinity, height: 50,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                          onPressed: salvando ? null : () async {
+                            setStateModal(() => salvando = true);
+                            try {
+                              await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).update({
+                                'destino': destinoCtrl.text.trim(),
+                                'data_envio': dataCtrl.text.trim(),
+                              });
+                              if (context.mounted) Navigator.pop(context);
+                            } catch(e) {
+                              setStateModal(() => salvando = false);
+                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.redAccent));
+                            }
+                          },
+                          icon: salvando ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.save),
+                          label: const Text("Salvar Destino", style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 5),
-                  Text(jovem['nome'], style: const TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 25),
-                  
-                  TextField(
-                    controller: destinoCtrl, 
-                    style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                    decoration: InputDecoration(labelText: "Destino da Missão", hintText: "Ex: Brasil São Paulo Sul", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.public, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                  ),
-                  const SizedBox(height: 15),
-                  
-                  TextField(
-                    controller: dataCtrl, 
-                    style: TextStyle(color: isEscuro ? Colors.white : Colors.black87),
-                    decoration: InputDecoration(labelText: "Data de Envio/Abertura", hintText: "Ex: 15/08/2026", labelStyle: TextStyle(color: isEscuro ? Colors.white70 : Colors.grey.shade700), prefixIcon: Icon(Icons.calendar_today, color: isEscuro ? Colors.white70 : Colors.grey.shade600), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                  ),
-                  
-                  const SizedBox(height: 30),
-                  
-                  SizedBox(
-                    width: double.infinity, height: 50,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      onPressed: salvando ? null : () async {
-                        setStateModal(() => salvando = true);
-                        try {
-                          await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).update({
-                            'destino': destinoCtrl.text.trim(),
-                            'data_envio': dataCtrl.text.trim(),
-                          });
-                          if (context.mounted) Navigator.pop(context);
-                        } catch(e) {
-                          setStateModal(() => salvando = false);
-                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.redAccent));
-                        }
-                      },
-                      icon: salvando ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.save),
-                      label: const Text("Salvar Destino", style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           );
@@ -152,7 +157,6 @@ class _ChamadosEnviadosTelaState extends State<ChamadosEnviadosTela> {
         iconTheme: IconThemeData(color: corTexto),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // Busca todos os jovens que estão com o status de Enviado
         stream: FirebaseFirestore.instance.collection('jovens').where('status', isEqualTo: 'Enviado').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.green));
@@ -170,7 +174,6 @@ class _ChamadosEnviadosTelaState extends State<ChamadosEnviadosTela> {
             );
           }
 
-          // Filtra a lista inteligentemente pelo Nível de Acesso
           List<Map<String, dynamic>> jovensEnviados = snapshot.data!.docs.map((doc) {
             var dados = doc.data() as Map<String, dynamic>;
             dados['id'] = doc.id;
@@ -187,8 +190,17 @@ class _ChamadosEnviadosTelaState extends State<ChamadosEnviadosTela> {
             );
           }
 
-          return ListView.builder(
+          // A MAGIA DA RESPONSIVIDADE: 
+          // GridView substitui o ListView e preenche o espaço inteligentemente.
+          return GridView.builder(
             padding: const EdgeInsets.all(16),
+            // MaxCrossAxisExtent decide a largura. Se passar de 450px, ele cria outra coluna.
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 450, 
+              mainAxisExtent: 95, // Altura fixa e ideal para os cards que você construiu
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            ),
             itemCount: jovensEnviados.length,
             itemBuilder: (context, index) {
               final jovem = jovensEnviados[index];
@@ -200,29 +212,37 @@ class _ChamadosEnviadosTelaState extends State<ChamadosEnviadosTela> {
               
               return Card(
                 color: corFundo,
-                margin: const EdgeInsets.only(bottom: 12),
+                margin: EdgeInsets.zero, // Margem removida porque o GridDelegate já lida com o espaçamento
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isEscuro ? Colors.white12 : Colors.grey.shade200)),
                 elevation: 0,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () => _atualizarDestinoJovem(jovem),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    leading: CircleAvatar(
-                      backgroundColor: aguardando ? Colors.orange.withValues(alpha: 0.15) : Colors.green.withValues(alpha: 0.15),
-                      child: Icon(aguardando ? Icons.hourglass_empty : Icons.flight_takeoff, color: aguardando ? Colors.orange : Colors.green),
+                  child: Center(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      leading: CircleAvatar(
+                        backgroundColor: aguardando ? Colors.orange.withValues(alpha: 0.15) : Colors.green.withValues(alpha: 0.15),
+                        child: Icon(aguardando ? Icons.hourglass_empty : Icons.flight_takeoff, color: aguardando ? Colors.orange : Colors.green),
+                      ),
+                      title: Text(
+                        jovem['nome'] ?? 'Sem nome', 
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 4),
+                          Text("Enviado em: ${dataEnvio.isEmpty ? 'Pendente' : dataEnvio}", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontSize: 12), maxLines: 1),
+                          const SizedBox(height: 2),
+                          Text(aguardando ? 'Aguardando Carta...' : destino, style: TextStyle(color: aguardando ? Colors.orange : Colors.green, fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                      trailing: const Icon(Icons.edit, color: Colors.grey, size: 20),
                     ),
-                    title: Text(jovem['nome'] ?? 'Sem nome', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corTexto)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 4),
-                        Text("Enviado/Aberto em: ${dataEnvio.isEmpty ? 'Pendente' : dataEnvio}", style: TextStyle(color: isEscuro ? Colors.white70 : Colors.black87, fontSize: 12)),
-                        const SizedBox(height: 2),
-                        Text(aguardando ? 'Aguardando Carta...' : destino, style: TextStyle(color: aguardando ? Colors.orange : Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
-                      ],
-                    ),
-                    trailing: const Icon(Icons.edit, color: Colors.grey, size: 20),
                   ),
                 ),
               );

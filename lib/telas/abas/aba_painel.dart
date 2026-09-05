@@ -214,7 +214,7 @@ class _AbaPainelState extends State<AbaPainel> {
                 'ultima_atualizacao': FieldValue.serverTimestamp(),
               });
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jovem em Preparação!'), backgroundColor: Colors.green));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jovem em processo!'), backgroundColor: Colors.green));
                 _abrirPainelDoJovem(jovem);
               }
             },
@@ -240,6 +240,10 @@ class _AbaPainelState extends State<AbaPainel> {
     final idadeCtrl = TextEditingController(text: isEdicao ? jovemAtual['idade'].toString() : "");
     final telefoneCtrl = TextEditingController(text: isEdicao ? jovemAtual['telefone'] : "");
     String sexoSelecionado = isEdicao ? (jovemAtual['sexo'] ?? "Masculino") : "Masculino";
+
+    bool temMentor = isEdicao ? (jovemAtual['tem_mentor'] ?? false) : false;
+    final mentorNomeCtrl = TextEditingController(text: isEdicao ? (jovemAtual['mentor_nome'] ?? "") : "");
+    final mentorTelefoneCtrl = TextEditingController(text: isEdicao ? (jovemAtual['mentor_telefone'] ?? "") : "");
 
     bool salvando = false;
 
@@ -284,8 +288,28 @@ class _AbaPainelState extends State<AbaPainel> {
                   ),
                   const SizedBox(height: 15),
                   
-                  TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp", prefixIcon: const Icon(Icons.phone), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
-                  const SizedBox(height: 20),
+                  TextField(controller: telefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp do Jovem", prefixIcon: const Icon(Icons.phone), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+                  
+                  const SizedBox(height: 15),
+                  const Divider(),
+                  
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text("Possui Mentor?", style: TextStyle(color: isEscuro ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                    subtitle: Text("Marque se o jovem já tem um mentor designado.", style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    value: temMentor,
+                    activeColor: Colors.blue,
+                    onChanged: (val) => setStateModal(() => temMentor = val),
+                  ),
+
+                  if (temMentor) ...[
+                    const SizedBox(height: 10),
+                    TextField(controller: mentorNomeCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), decoration: InputDecoration(labelText: "Nome do Mentor", prefixIcon: const Icon(Icons.support_agent), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+                    const SizedBox(height: 15),
+                    TextField(controller: mentorTelefoneCtrl, style: TextStyle(color: isEscuro ? Colors.white : Colors.black87), keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: "WhatsApp do Mentor", prefixIcon: const Icon(Icons.phone_android), filled: true, fillColor: isEscuro ? Colors.black26 : Colors.grey.shade100, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+                  ],
+
+                  const SizedBox(height: 25),
                   
                   SizedBox(
                     width: double.infinity, height: 50,
@@ -309,6 +333,9 @@ class _AbaPainelState extends State<AbaPainel> {
                             'estaca': estacaFinal,
                             'unidade': unidadeFinal,
                             'bispo_uid': bispoUidEncontrado,
+                            'tem_mentor': temMentor,
+                            'mentor_nome': temMentor ? mentorNomeCtrl.text.trim() : "",
+                            'mentor_telefone': temMentor ? mentorTelefoneCtrl.text.trim() : "",
                           };
 
                           if (isEdicao) {
@@ -353,6 +380,9 @@ class _AbaPainelState extends State<AbaPainel> {
     bool isEscuro = Theme.of(context).brightness == Brightness.dark;
     TextEditingController notaCtrl = TextEditingController();
 
+    bool temMentor = jovem['tem_mentor'] == true;
+    String mentorNome = jovem['mentor_nome'] ?? '';
+
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (context) {
@@ -378,11 +408,48 @@ class _AbaPainelState extends State<AbaPainel> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(jovem['nome'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isEscuro ? Colors.white : Colors.black), overflow: TextOverflow.ellipsis),
-                          Text("${jovem['idade']} anos", style: const TextStyle(color: Colors.grey)),
+                          Text("${jovem['idade']} anos • ${jovem['unidade']}", style: const TextStyle(color: Colors.grey)),
+                          if (temMentor && mentorNome.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text("Mentor(a): $mentorNome", style: const TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
                         ],
                       ),
                     ),
                     IconButton(icon: const Icon(Icons.edit, color: Colors.grey), onPressed: () { Navigator.pop(context); _mostrarFormularioJovem(jovemAtual: jovem); }),
+                    // BOTÃO DE EXCLUIR JOVEM
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (contextDialog) => AlertDialog(
+                            backgroundColor: isEscuro ? const Color(0xFF1E1E1E) : Colors.white,
+                            title: Text("Excluir Jovem", style: TextStyle(color: isEscuro ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                            content: Text("Tem certeza que deseja excluir ${jovem['nome']} permanentemente?", style: const TextStyle(color: Colors.grey)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(contextDialog),
+                                child: const Text("Cancelar", style: TextStyle(color: Colors.grey)),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                                onPressed: () async {
+                                  Navigator.pop(contextDialog); // Fecha Dialog
+                                  Navigator.pop(context); // Fecha o painel
+                                  await FirebaseFirestore.instance.collection('jovens').doc(jovem['id']).delete();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jovem excluído com sucesso!'), backgroundColor: Colors.green));
+                                  }
+                                },
+                                child: const Text("Excluir"),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                     Stack(
                       alignment: Alignment.center,
                       children: [
@@ -619,7 +686,6 @@ class _AbaPainelState extends State<AbaPainel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. CARDS DO TOPO
                   Padding(
                     padding: const EdgeInsets.all(16.0), 
                     child: Row(
@@ -628,8 +694,8 @@ class _AbaPainelState extends State<AbaPainel> {
                           Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardList(titulo: "Jovens em Perspectiva", statusFiltro: "Perspectiva", minhaEstaca: _minhaEstaca, minhaUnidade: _minhaUnidade)));
                         }), 
                         const SizedBox(width: 8), 
-                        _construirCartaoDashboard("Preparação", jovensPreparacao.length.toString(), Colors.blue, Icons.assignment_ind, isEscuro, () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardList(titulo: "Jovens em Preparação", statusFiltro: "Preparação", minhaEstaca: _minhaEstaca, minhaUnidade: _minhaUnidade)));
+                        _construirCartaoDashboard("Em processo", jovensPreparacao.length.toString(), Colors.blue, Icons.assignment_ind, isEscuro, () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardList(titulo: "Jovens em processo", statusFiltro: "Preparação", minhaEstaca: _minhaEstaca, minhaUnidade: _minhaUnidade)));
                         }),
                         const SizedBox(width: 8), 
                         _construirCartaoDashboard("Finalizados", jovensFinalizados.length.toString(), Colors.green, Icons.check_circle, isEscuro, () {
@@ -671,11 +737,11 @@ class _AbaPainelState extends State<AbaPainel> {
 
                   // 3. PROCESSO INICIADO (Preparação)
                   const SizedBox(height: 25),
-                  Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Processo Iniciado", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTexto))),
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0), child: Text("Em processo", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: corTexto))),
                   const SizedBox(height: 10),
                   
                   if (jovensPreparacao.isEmpty) 
-                    const Padding(padding: EdgeInsets.all(16.0), child: Text("Nenhum jovem em preparação.", style: TextStyle(color: Colors.grey)))
+                    const Padding(padding: EdgeInsets.all(16.0), child: Text("Nenhum jovem em processo.", style: TextStyle(color: Colors.grey)))
                   else 
                     ListView.builder(
                       shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), padding: const EdgeInsets.symmetric(horizontal: 16),

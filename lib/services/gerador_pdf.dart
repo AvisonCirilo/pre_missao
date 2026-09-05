@@ -91,12 +91,21 @@ class GeradorPdf {
               );
 
               var listaJovens = alasDaEstaca[ala]!;
-              var prep = listaJovens.where((j) => j['status'] != 'Enviado').toList();
-              var env = listaJovens.where((j) => j['status'] == 'Enviado').toList();
+              
+              // Ajustado para englobar os status atuais corretamente
+              var prep = listaJovens.where((j) => j['status'] != 'Enviado' && j['status'] != 'Finalizado').toList();
+              var env = listaJovens.where((j) => j['status'] == 'Enviado' || j['status'] == 'Finalizado').toList();
 
-              // TABELA: JOVENS EM PREPARAÇÃO
+              // Função para exibir o texto correto na coluna de status da tabela
+              String traduzirStatus(String? statusBD) {
+                if (statusBD == 'Preparação') return 'Em processo';
+                if (statusBD == 'Finalizado' || statusBD == 'Enviado') return 'Finalizado';
+                return statusBD ?? '';
+              }
+
+              // TABELA: JOVENS EM PROCESSO
               if (prep.isNotEmpty) {
-                conteudos.add(pw.Text('Em Preparação / Perspectiva', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)));
+                conteudos.add(pw.Text('Em processo / Perspectiva', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)));
                 conteudos.add(pw.SizedBox(height: 4));
                 conteudos.add(
                   pw.TableHelper.fromTextArray(
@@ -106,25 +115,35 @@ class GeradorPdf {
                     rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                     cellStyle: const pw.TextStyle(fontSize: 9),
                     cellPadding: const pw.EdgeInsets.all(6),
-                    data: prep.map((j) => [j['nome'], j['idade'].toString(), j['status'] ?? '', j['telefone'] ?? '']).toList(),
+                    data: prep.map((j) => [
+                      j['nome'], 
+                      j['idade'].toString(), 
+                      traduzirStatus(j['status']), 
+                      j['telefone'] ?? ''
+                    ]).toList(),
                   ),
                 );
                 conteudos.add(pw.SizedBox(height: 10));
               }
 
-              // TABELA: CHAMADOS ENVIADOS
+              // TABELA: PROCESSOS FINALIZADOS
               if (env.isNotEmpty) {
-                conteudos.add(pw.Text('Chamados Enviados', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)));
+                conteudos.add(pw.Text('Processos Finalizados', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)));
                 conteudos.add(pw.SizedBox(height: 4));
                 conteudos.add(
                   pw.TableHelper.fromTextArray(
-                    headers: ['Nome', 'Idade', 'Data Envio', 'Destino'],
+                    headers: ['Nome', 'Idade', 'Data de Envio', 'Destino'],
                     headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.black, fontSize: 9),
                     headerDecoration: const pw.BoxDecoration(color: PdfColors.green100),
                     rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
                     cellStyle: const pw.TextStyle(fontSize: 9),
                     cellPadding: const pw.EdgeInsets.all(6),
-                    data: env.map((j) => [j['nome'], j['idade'].toString(), j['data_envio'] ?? '', j['destino'] ?? '']).toList(),
+                    data: env.map((j) => [
+                      j['nome'], 
+                      j['idade'].toString(), 
+                      j['data_envio'] ?? '', 
+                      j['destino'] ?? ''
+                    ]).toList(),
                   ),
                 );
                 conteudos.add(pw.SizedBox(height: 15));
